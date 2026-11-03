@@ -70,15 +70,16 @@ What is:
 | G3 | 100 tasks | 70 public (train and dev), 30 held out | Task files |
 | G4 | Honest baselines | 3 local models on the held-out set, 5 tries each, with confidence intervals | Committed run records |
 | G5 | The grader agrees with Arthur's earlier ones | On the 40 tasks shared with agent-eval-harness, same verdicts as its strict grader | Regrade test |
-| G6 | Anyone can run it | `uv` install plus one `docker compose up`; no account, key or GPU | A clean-machine run |
+| G6 | Anyone can run it | `uv` install plus one `docker compose up`; no key or GPU | A clean-machine run |
 | G7 | It's public | Published on the Environments Hub, with a results table | The Hub page |
-| G8 | v1 costs nothing | $0 spent | No paid service used |
-| G9 *(optional, paid)* | Training helps | A 1–3B model beats its own baseline on the held-out set, interval above 0, within the cap | A training record |
+| G8 | It costs nothing | $0 spent, every slice | No paid service used |
+| G9 | Training helps, at $0 | Qwen3 1.7B, LoRA-trained on its own verified rollouts on the Mac, beats its own baseline on the held-out set, interval above 0 | A training record |
 
 ## Non-goals (v1)
 
-- **Training.** v1 is the environment, the tasks and the baselines. The paid
-  run is a later, optional slice with its own approval.
+- **Paid training.** No rented GPUs at any stage (Arthur, 2026-11-03).
+  Slice 7 trains on the Mac at $0, by rejection sampling, not GRPO
+  (ADR-011).
 - **A model as judge.** Every reward is computed by code.
 - **Write access.** The agent never changes data, in any version.
 - **Rollouts against the live server.** Its limits (5 queries per hour per
@@ -89,7 +90,14 @@ What is:
 
 ## Decisions (settled with Arthur)
 
-1. **Name:** `anaylisists` (2026-11-03).
+All on 2026-11-03:
+1. **Name:** `anaylisists`.
+2. **Framework:** verifiers v1, published publicly on the Environments Hub
+   from Arthur's account, MIT licence.
+3. **Local models:** Ollama with Qwen3 1.7B, Qwen3.5 4B and Llama 3.2 3B
+   (about 7 GB of downloads approved).
+4. **Held-out tasks:** private, never in the repo or on the Hub.
+5. **Money:** $0 only. Training, if it happens, runs on the Mac.
 
 Everything else in Phase 5 is a recommendation until Arthur agrees.
 

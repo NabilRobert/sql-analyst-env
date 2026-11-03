@@ -4,11 +4,11 @@
 
 | # | Prerequisite | Needed for | Who |
 |---|---|---|---|
-| P1 | Arthur OKs Phases 1, 2 and 5, and verifiers v1 (ADR-002) | Slice 1 | Arthur |
+| P1 | Arthur OKs Phases 1, 2 and 5 (verifiers v1 is already approved) | Slice 1 | Arthur |
 | P2 | The GitHub repo exists | Pushing anything | Arthur |
-| P3 | OK for Ollama and three models, about 7 GB (ADR-010) | Spike 3, slice 4 | Arthur |
+| P3 | ~~OK for Ollama and three models~~ approved 2026-11-03 | Spike 3, slice 4 | Arthur |
 | P4 | A Prime Intellect account, terms accepted | Slice 5 | Arthur |
-| P5 | A written budget and cap for GPUs (ADR-011) | Slice 7 | Arthur |
+| P5 | OK for the MLX weights and `mlx-lm`, once sized (ADR-011) | Slice 7 | Arthur |
 
 ## Spikes (local, $0)
 
@@ -18,6 +18,7 @@
 | 2 | Does the harness's compose take a newer MCP-backbone? | Build it by git context with the pin at current `main`; seed two extra workspaces; measure memory | Tools answer; fingerprints match the harness's; memory known | 1 h |
 | 3 | How fast is a local model? | Ollama with Qwen3 1.7B; 5 rollouts of the toy task through the OpenAI endpoint | Tool calls parse; time per rollout known; full baseline time estimated | 1 h |
 | 4 | Do the data copies change the answers? | Draft the copy script; run the 40 reused gold queries on stock, A and B | Every answer differs between A and B, or the script is adjusted | 1 h |
+| 5 | Which runtime serves the trained model? (before slice 7) | mlx-lm's server with Qwen3 1.7B: do tool calls parse in the environment? If not, fuse and convert for Ollama | One runtime for before and after | 1 h |
 
 ## Slices
 
@@ -33,7 +34,7 @@ mutation-checked once. Each slice updates `docs/guide.md`.
 | **4. Baselines** | Three models on dev, then held-out once; run records; generated results table; top-20 rollouts read for new cheats | G4 met; every number traces to a record; any new cheat is a cheat policy | $0 (electricity) |
 | **5. Publish** | README and guide final; MIT licence; `prime env push` from Arthur's account | Installs and runs on a clean venv from the Hub; G6, G7 | $0 |
 | **6. Evidence and write-up** | JOURNEY; portfolio entry (with the portfolio session) | A privacy check passes; every claim traces to a file | $0 |
-| **7. Training (optional, paid)** | prime-rl config; rented GPUs; re-measured baseline; one run; held-out once | G9 met or reported as not met; spend under the cap | Up to $30, not approved |
+| **7. Training at $0** | Rejection-sampling LoRA on the Mac (ADR-011): baseline re-measured in the trained model's runtime; up to 3 rounds picked on dev; held-out once; setup shared with Project 14 | G9 met, or reported as not met | $0 |
 
 ## Slice 1 in detail: the first slice
 
@@ -70,14 +71,14 @@ merged.
 
 ## Cost model
 
-| Item | v1 (slices 1–6) | Slice 7, if approved |
+| Item | Slices 1–6 | Slice 7 |
 |---|---|---|
 | Models | $0: local, through Ollama | — |
-| Compute | $0: this Mac | About $23–28 for 2 × H100, about 4 hours (ADR-011) |
+| Compute | $0: this Mac | $0: this Mac, overnight runs |
 | Hosting | $0: nothing hosted; the Hub listing is free as far as found | — |
-| Prime trace uploads | $0: `--no-push` always | Small; with Arthur's OK only |
-| Downloads | About 7 GB of models, plus images and a 13 MB Pagila | — |
-| **Hard cap** | **$0** | **$30 recommended** |
+| Prime trace uploads | $0: `--no-push` always | $0: `--no-push` always |
+| Downloads | About 7 GB of models (approved), plus images and a 13 MB Pagila | Qwen3 1.7B weights for MLX and `mlx-lm`, sized and asked first |
+| **Hard cap** | **$0** | **$0** |
 
-**Nothing in slices 1 to 6 costs money.** No Sumopod balance is used by
-this project at any stage.
+**Nothing in this project costs money** (Arthur, 2026-11-03). No Sumopod
+balance and no GPU rental, at any stage.

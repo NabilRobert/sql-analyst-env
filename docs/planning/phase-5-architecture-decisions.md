@@ -8,7 +8,7 @@ slice and the open questions are at the end.
 task files (public + private held-out)
         │
         ▼
-verifiers v1 Taskset ──prompt──► model (Ollama, local; later vLLM on a rented GPU)
+verifiers v1 Taskset ──prompt──► model (Ollama, local)
         │                               │ tool calls
         │ Toolset (MCP over HTTP) ◄─────┘
         ▼
@@ -38,7 +38,7 @@ already hold most of what this needs, except the RL side.
 | Scripted agents for CI | **The harness's scripted and gullible agents**, as the pattern (ADR-006) | The cheat policies |
 | Spans | **agent-observability's** conventions; MCP-backbone already emits spans (ADR-012) | One span per rollout |
 | Local models | **Ollama** and open models (ADR-010) | — |
-| Training, if approved | **prime-rl** GRPO (ADR-011) | A config file |
+| Training (slice 7) | **mlx-lm** LoRA on the Mac; Project 14's planned setup (ADR-011) | Picking verified rollouts |
 | Perturbed data copies | Nothing fits: the copies must keep Pagila's schema and keys while changing answers | **Built:** a short seeded SQL script; this is part of what's shown |
 | Reward, cheat suite, task checks | Nothing fits | **Built:** this is what the project demonstrates |
 
@@ -49,11 +49,17 @@ Arthur chose it on 2026-11-03.
 
 **Rejected:** `sql-analyst-env`, `rl-analyst-env`, `pagila-analyst-env`.
 
-## ADR-002: verifiers v1, published on the Environments Hub
+## ADR-002: verifiers v1, published on the Environments Hub (settled)
 
 **Decision:** build on Prime Intellect's `verifiers`, the **v1 API**
-(`import verifiers.v1 as vf`), pinned to an exact version. **This is a new
-framework, so it needs Arthur's OK.**
+(`import verifiers.v1 as vf`), pinned to an exact version, published
+publicly on the Environments Hub in slice 5 from an account Arthur creates.
+Arthur approved the framework and publishing on 2026-11-03.
+
+**Prime's terms** (updated 2026-10-12): Arthur keeps ownership; Prime's
+licence is only to provide the service; Prime won't train on the content;
+the licence chosen at publication governs others' use. New York law,
+arbitration in San Francisco. Not legal advice.
 
 **What was checked** (primary sources, 2026-11-03):
 - **Licence:** MIT (`LICENSE` and `pyproject.toml`). Python 3.11 to 3.14.
@@ -272,15 +278,15 @@ C6 catches a wrong answer key. C7 catches an ambiguous question.
 - *Comparing SQL text:* many correct queries look different.
 - *A model as judge:* costs money, and a policy can learn to persuade it.
 
-## ADR-009: Held-out tasks and contamination
+## ADR-009: Held-out tasks and contamination (private held-out settled)
 
 **Decision:**
 - **Two data copies,** made by one seeded SQL script from the pinned
   Pagila. It deletes a few percent of films and their rentals, shifts dates
   by a seeded number of days, and scales payment amounts. Categories,
   countries, languages and the ids that questions name are kept.
-- **The held-out tasks stay out of the repo and off the Hub.** Only Arthur
-  runs them, and the results table marks which numbers are held-out.
+- **The held-out tasks stay out of the repo and off the Hub** (Arthur,
+  2026-11-03). Only Arthur runs them, and the results table marks which numbers are held-out.
 - **A canary string** in every task file, and a request in the README not
   to train on them, so leaked tasks can be spotted in a model's output.
 - **What can't be fixed:** Pagila's schema is public and the models have
@@ -294,20 +300,21 @@ C6 catches a wrong answer key. C7 catches an ambiguous question.
   loses the link to MCP-backbone's and the harness's published numbers.
   A v2 option.
 
-## ADR-010: Local compute
+## ADR-010: Local compute (settled)
 
 **This Mac:** Apple M2, 16 GB, about 33 GB free (2026-11-03). No model
 runtime is installed yet.
 
 **Runtime: Ollama** (OpenAI-compatible at `localhost:11434/v1`; tools
-supported; `tool_choice` and logprobs aren't, and neither is needed). **A
-new tool, so it needs Arthur's OK, with the downloads.**
+supported; `tool_choice` and logprobs aren't, and neither is needed).
+Arthur approved Ollama and the three models on 2026-11-03. Exact sizes are
+reported before each pull.
 
 **Models: three families, all with tool calling, all fitting comfortably:**
 
 | Model | Why | Licence | Download (Ollama, 4-bit) |
 |---|---|---|---|
-| Qwen3 1.7B | The training candidate, so its baseline is on the table; prime-rl's own examples use it | Apache-2.0 | 1.4 GB |
+| Qwen3 1.7B | The training candidate (ADR-011), so its baseline is on the table | Apache-2.0 | 1.4 GB |
 | Qwen3.5 4B | The strongest that fits easily | Apache-2.0 | about 3.3–4.0 GB |
 | Llama 3.2 3B | A second family, widely used | Llama 3.2 Community | 2.0 GB |
 
@@ -327,43 +334,47 @@ spike 3 before committing to the full run.
 - *Qwen2.5-Coder 3B:* a non-commercial licence.
 - *API models:* cost money, and small open models are the subject.
 
-## ADR-011: Paid training, later and optional
+## ADR-011: Training at $0, on the Mac (settled)
 
-**Nothing here is spent without Arthur's written OK and a cap.**
+**Arthur, 2026-11-03: "$0 only".** No GPU rental at any stage.
 
-**Plan:**
-- **prime-rl** (Apache-2.0), GRPO, on **Qwen3 1.7B**, trained on the train
-  split with data copies rotating from a pool of seeds (cheat 3).
-- **The baseline is re-measured on the rented GPU,** at full precision and
-  under vLLM, before training starts. The 4-bit Ollama baseline isn't
-  comparable.
-- Checkpoints are picked on dev. The held-out set is run once, at the end.
-- Success is G9: the trained model beats its own baseline on the held-out
-  set, with a confidence interval above 0.
+**Decision: rejection-sampling fine-tuning, not GRPO.** The verified reward
+picks the training data:
+1. Qwen3 1.7B attempts each **train** task 8 times through this
+   environment, on data copies rotating from a pool of seeds (cheat 3).
+2. Only rollouts that score 1.0 are kept: correct on both copies, no
+   refused query.
+3. A LoRA adapter is trained on those with **MLX** (`mlx-lm`), on the Mac.
+4. Repeat for up to 3 rounds. Each round's adapter is picked on **dev**.
+5. The held-out set is run **once**, at the end.
 
-**Cost** (on-demand prices read 2026-11-03; the hours are an estimate from
-prime-rl's examples, "2–4 H100 GPUs in a few hours" for Qwen3 1.7B):
+It's reported as "learning from verified rollouts" (rejection sampling, as
+in STaR and expert iteration), never as RL or GRPO. The environment is
+still a GRPO environment: anyone with GPUs can train on it with prime-rl.
 
-| Step | Prime Intellect, 2 × H100 at $3.50/h | RunPod Secure, 2 × H100 PCIe at $2.89/h |
-|---|---|---|
-| Smoke run, 30 min | $3.50 | $2.89 |
-| Training, 3 h | $21.00 | $17.34 |
-| Evaluation, 30 min | $3.50 | $2.89 |
-| **Total** | **$28.00** | **$23.12** |
+**Same model, same runtime, before and after.** The 4-bit Ollama baseline
+isn't comparable to an MLX model. So the starting model is re-measured in
+the runtime the adapter runs in, and spike 5 picks that runtime: mlx-lm's
+server if its tool calls parse, or the fused model converted for Ollama.
 
-**Recommended cap: $30, hard.** Enforced three ways: prepaid credit no
-higher than the cap; a shutdown timer set on the machine when it starts;
-and checkpoints every 50 steps, so stopping early still leaves a result.
-Plus a smoke run first, and a stop if the reward doesn't move in the first
-hour.
+**Success is G9:** the trained model beats its own baseline on the held-out
+set, with a confidence interval above 0. If it doesn't, that's reported.
+
+**Shared with Project 14,** which plans MLX LoRA on the Mac too: one setup
+(data format, training, held-out scoring), built once by whichever project
+gets there first, owned by Project 14.
+
+**Cost:** $0. About 480 rollouts a round (60 tasks × 8), at the speed spike 3
+measures, plus minutes to an hour of LoRA training. Downloads: the
+full-precision Qwen3 1.7B weights for MLX (a few GB, sized before pulling)
+and `mlx-lm`.
 
 **Rejected:**
-- *RL on the Mac:* MLX does LoRA fine-tuning, but no established GRPO
-  trainer runs there, and prime-rl needs NVIDIA.
-- *Prime's Hosted Training:* no public price found.
+- *GRPO with prime-rl on rented GPUs* (2 × H100 for about 4 h, $23–28; or
+  LoRA on one H100 for about 3 h, $6–11): Arthur chose $0.
+- *GRPO on the Mac:* no established GRPO trainer runs on MLX, and prime-rl
+  needs NVIDIA.
 - *Free notebook GPUs:* unreliable sessions, and their terms limit this use.
-- *RunPod Community Cloud* (H100 PCIe $1.99/h): cheaper, but machines are
-  third-party hosts. Fine for public data; a choice for Arthur.
 
 ## ADR-012: The security gateway and tracing
 
@@ -378,9 +389,10 @@ stage. The environment adds one span per rollout, following
 `docs/conventions.md`: outcome, reward parts and timings, no SQL or prompt
 text. Off by default; on by setting the OTLP endpoint.
 
-## ADR-013: Licence
+## ADR-013: Licence (settled)
 
-**Decision:** MIT, like verifiers, MCP-backbone and the harness. Pagila
+**Decision:** MIT (Arthur, 2026-11-03), like verifiers, MCP-backbone and
+the harness. Pagila
 isn't redistributed; setup downloads it.
 
 **Rejected:** *Apache-2.0* (Project 10's choice, for its patent grant):
@@ -415,18 +427,18 @@ would drift apart.
 | # | Decision | Rejected | Status |
 |---|---|---|---|
 | 001 | Name `anaylisists` | sql-analyst-env, rl-analyst-env, pagila-analyst-env | **Settled** |
-| 002 | verifiers v1, exact pin, `--no-push` | v0, Inspect task, SkyRL format, Gymnasium, own loop | Open (new framework) |
+| 002 | verifiers v1, exact pin, `--no-push` | v0, Inspect task, SkyRL format, Gymnasium, own loop | **Settled** |
 | 003 | Cite `sql-agent-gym`; claim the combination, not the idea | Claiming anti-hacking as new | Open |
 | 004 | Local pinned MCP-backbone over HTTP, via the harness's repro compose | Live server, in-process, SQLite, paid sandbox | Open |
 | 005 | +1 correct on A and B; −0.5 unsafe; −0.1 expensive; cost as a metric | Correctness only, partial credit, cost penalty now, multiplier, prose | Open |
 | 006 | Cheat suite in CI; honest policy must score 1; top rollouts read by hand | Table without tests | Open |
 | 007 | 100 tasks (40 reused, 60 new); 60/10/30; family-held-out | Generated tasks, Spider/BIRD, random split | Open |
 | 008 | Harness's strict grader, copied; 7 task checks | Lenient grader, SQL text, judge, runtime harness dependency | Open |
-| 009 | Two seeded data copies; private held-out; canary | All public, new synthetic DB | Open |
-| 010 | Ollama; Qwen3 1.7B, Qwen3.5 4B, Llama 3.2 3B | LM Studio, mlx-lm, Gemma, Qwen2.5-Coder, APIs | Open (new tool, downloads) |
-| 011 | prime-rl GRPO on Qwen3 1.7B, $30 hard cap, later | RL on the Mac, Hosted Training, free GPUs | Open (paid) |
+| 009 | Two seeded data copies; private held-out; canary | All public, new synthetic DB | **Private held-out settled**; copies open |
+| 010 | Ollama; Qwen3 1.7B, Qwen3.5 4B, Llama 3.2 3B | LM Studio, mlx-lm, Gemma, Qwen2.5-Coder, APIs | **Settled** |
+| 011 | $0: rejection-sampling LoRA on the Mac with MLX | GRPO on rented GPUs, GRPO on MLX, free GPUs | **Settled** |
 | 012 | No gateway in v1; opt-in spans | Gateway now | Open |
-| 013 | MIT | Apache-2.0 | Open |
+| 013 | MIT | Apache-2.0 | **Settled** |
 | 014 | Generated results table, not pushed to Prime | Hosted leaderboard | Open |
 | 015 | Public tasks in the harness's format, shared | Separate format | Open |
 
@@ -437,16 +449,9 @@ Docker, no model, $0. See the [slice plan](slice-plan.md).
 
 ## Open questions
 
-**For Arthur:**
-1. **verifiers v1** as the framework (ADR-002)?
-2. **Ollama and three models,** about 7 GB of downloads (ADR-010)?
-3. **Held-out tasks private** (ADR-009)? It means only you can run them.
-4. **The paid run:** at all, and is $30 the cap (ADR-011)?
-5. **A Prime Intellect account** for publishing: you create it and accept
-   its terms (slice 5). Their terms (updated 2026-10-12) say you keep
-   ownership, Prime's licence is only to run the service, they won't train
-   on your content, and the licence you pick governs others' use. Disputes
-   go to arbitration in San Francisco. Not legal advice.
+**For Arthur:** none blocking. ADRs 003–008, 012, 014 and 015 are
+recommendations; OK-ing the plan (P1) settles them. He creates the GitHub
+repo (P2) and, at slice 5, the Prime account (P4).
 
 **For the spikes:** the working eval command at the pinned verifiers;
 whether `Toolset(url=…)` sends a header; the newer MCP-backbone pin in the

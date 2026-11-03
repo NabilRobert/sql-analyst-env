@@ -134,14 +134,15 @@ flowchart LR
 
 ## Constraints
 
-**Money:** v1 spends $0. No API models, no rented GPUs. A paid training run
-needs a written budget, a hard cap and Arthur's OK (slice plan).
+**Money:** $0, at every stage (Arthur, 2026-11-03). No API models, no
+rented GPUs, no Sumopod, no billed trace uploads.
 
 **Machine:** an Apple M2 with 16 GB of memory and about 33 GB of free disk
 (measured 2026-11-03). The model, Postgres and MCP-backbone share it.
 
-**Downloads:** a model runtime and three models (about 7 GB in all) need
-Arthur's OK first. Sizes are in ADR-010.
+**Downloads:** Ollama and three models (about 7 GB) are approved; exact
+sizes are reported before each pull. Anything else large (MLX weights for
+slice 7) is sized and asked first.
 
 **Public repo:** no server addresses, no keys, no employer or client
 names. The held-out tasks stay out of the repo.
