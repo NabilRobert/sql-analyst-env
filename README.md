@@ -7,10 +7,11 @@ tools, writes SQL and submits it. Code grades the answer: it must be right
 on the database the agent saw **and** on a hidden copy with different data,
 so a query that hard-codes the answer fails.
 
-**Status: slice 1 of 7.** The local stack, the two data copies, the 40
-reused tasks and the answer-key checks are built. The environment itself
-(on Prime Intellect's `verifiers`), the reward and the cheat suite come in
-slice 2. The plan is on the `docs/planning` branch.
+**Status: slice 2 of 7.** The local stack, the two data copies, the 40
+reused tasks and their answer-key checks (slice 1); the environment on
+Prime Intellect's [`verifiers`](https://github.com/PrimeIntellect-ai/verifiers)
+v1, the reward, and a cheat suite of scripted policies that must fail to
+game it (slice 2). The plan is on the `docs/planning` branch.
 
 ## Run it
 
@@ -18,11 +19,16 @@ Needs Docker and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 docker compose up -d --wait   # MCP-backbone + Postgres + two copies of Pagila, localhost only
-uv run pytest                 # every task's answer key, checked through MCP-backbone
+uv run pytest                 # answer keys, rewards and the cheat suite, against the stack
 ```
 
 The first `up` builds the image and downloads Pagila (about 1 GB of
 images on disk, 13 MB of data). `docker compose down -v` resets everything.
+The full suite takes several minutes: the cheat suite plays about 480
+rollouts through verifiers, with a scripted stand-in for the model.
+
+Every evaluation goes through `analyst_env/run_eval.py`, which switches
+off verifiers' paid defaults (uploads, hosted sandboxes, hosted models).
 
 ## Layout
 
@@ -36,6 +42,11 @@ tasks/
   public.yaml         the public tasks (train and dev), with answer keys
   private/            held-out tasks; git ignores it
 analyst_env/
+  environment.py      the verifiers Taskset and Task, with the rewards
+  tools.py            the agent's tools: MCP-backbone's four plus submit_answer
+  scoring.py          is the submitted query right on both copies?
+  penalties.py        which refused queries cost reward
+  run_eval.py         runs `vf-eval` locally, at $0
   tasks.py            the task file's shape
   backbone.py         the client for the local MCP-backbone
   task_checks.py      the seven answer-key checks
@@ -44,6 +55,7 @@ analyst_env/
   fingerprint.py      the data fingerprint
   cli.py              `uv run analyst-env fingerprint`
 tests/                unit tests; tests/stack/ needs the stack running
+  scripted/           scripted policies, a stand-in model server, an egress guard
 docs/guide.md         how it works, in plain English
 ```
 
@@ -54,8 +66,19 @@ docs/guide.md         how it works, in plain English
 - **agent-eval-harness** (MIT): the image that builds MCP-backbone at a pin
   (fetched by git, not copied), the 40 Pagila tasks, the strict grader and
   the fingerprint queries.
+- **verifiers** (MIT), pinned at 0.4.0: the rollout loop, the chat
+  harness, the reward plumbing and the trace format.
 - **Pagila** (PostgreSQL License): downloaded at a pinned commit during
   setup, not redistributed.
+
+## Prior work
+
+Text-to-SQL RL environments already exist, including one on the
+Environments Hub focused on reward hacking (`vedant/sql-agent-gym`).
+What's different here is the combination: Postgres behind a
+production-style MCP server with a validator, a cost check and an audit
+log; safety and cost penalties on top of the result match; and a hidden
+second data copy, so memorised or hard-coded answers fail.
 
 ## Licence
 
