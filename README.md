@@ -1,4 +1,8 @@
-# A data-analyst RL environment
+# Flight Analysts: a data-analyst RL environment
+
+Despite the name, there's no flight data here: the database is Pagila, a
+sample DVD-rental store. (Not to be confused with AI Flight School, a
+separate project that's a flight simulator for AI agents.)
 
 A reinforcement-learning environment for a data-analyst agent. The agent
 gets a business question, explores a Postgres database through
