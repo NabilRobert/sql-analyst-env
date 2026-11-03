@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from analyst_env.backbone import REPO_ROOT, BackboneCopy
+from analyst_env.backbone import REPO_ROOT, BackboneCopy, mcp_url, open_copies, read_stack_keys
 
 FINGERPRINT_FILE = REPO_ROOT / "stack" / "fingerprints.json"
 
@@ -51,6 +51,12 @@ async def fingerprint(copy: BackboneCopy) -> str:
         parts.extend(result.rows)
     text = json.dumps(parts, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+async def live_fingerprints() -> dict[str, str]:
+    """Each copy's fingerprint now, from the running stack."""
+    async with open_copies(mcp_url(), read_stack_keys()) as copies:
+        return {copy.name: await fingerprint(copy) for copy in copies}
 
 
 def load_stored_fingerprints(path: Path = FINGERPRINT_FILE) -> dict[str, str]:

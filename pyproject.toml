@@ -8,12 +8,14 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     # mcp 2.x is built on httpx2; its connection errors are httpx2's.
     "httpx2>=2.16,<3",
-    # verifiers pins mcp==2.0.0 (ADR-002); matching it now avoids a clash in slice 2.
+    # verifiers pins mcp==2.0.0 (ADR-002).
     "mcp==2.0.0",
     "pydantic>=2.14,<3",
     "pyyaml>=6.0,<7",
     "sqlglot>=30.23,<31",
     "typer>=0.27,<1",
+    # An exact pin: 0.4.0 removed a whole API three weeks after release (ADR-002).
+    "verifiers==0.4.0",
 ]
 
 [project.scripts]

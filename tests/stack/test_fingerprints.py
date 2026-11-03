@@ -7,7 +7,7 @@ import pytest
 from analyst_env.backbone import mcp_url, open_copies
 from analyst_env.fingerprint import (
     FingerprintError,
-    fingerprint,
+    live_fingerprints,
     load_stored_fingerprints,
     mismatched_copies,
 )
@@ -17,17 +17,12 @@ from tests.stack.conftest import public_tasks
 pytestmark = pytest.mark.stack
 
 
-async def _live(keys: dict[str, str]) -> dict[str, str]:
-    async with open_copies(mcp_url(), keys) as copies:
-        return {copy.name: await fingerprint(copy) for copy in copies}
-
-
 def test_live_fingerprints_match_the_stored_ones(stack_keys: dict[str, str]) -> None:
-    assert asyncio.run(_live(stack_keys)) == load_stored_fingerprints()
+    assert asyncio.run(live_fingerprints()) == load_stored_fingerprints()
 
 
 def test_the_copies_have_different_data(stack_keys: dict[str, str]) -> None:
-    live = asyncio.run(_live(stack_keys))
+    live = asyncio.run(live_fingerprints())
     assert live["copy_a"] != live["copy_b"]
 
 

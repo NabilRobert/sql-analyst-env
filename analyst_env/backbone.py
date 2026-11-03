@@ -87,14 +87,22 @@ class BackboneCopy:
         self.name = name
         self._session = session
 
-    async def run_query(self, sql: str) -> QueryResult:
-        result = await self._session.call_tool("run_query", {"sql": sql})
-        structured = result.structured_content
-        data: Any = structured if structured else json.loads(result.content[0].text)  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownArgumentType]
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+        """Any MCP-backbone tool's answer, as JSON data. A refused call
+        (unknown table, bad key) comes back as {"error": reason}."""
+        result = await self._session.call_tool(name, arguments)
+        first = result.content[0] if result.content else None
+        text = str(getattr(first, "text", ""))
+        if result.is_error:
+            return {"error": text}
+        data: Any = result.structured_content or json.loads(text)
         # FastMCP wraps a non-object return value as {"result": ...}.
         if isinstance(data, dict) and set(cast(dict[str, Any], data)) == {"result"}:
-            data = cast(dict[str, Any], data)["result"]
-        return QueryResult.model_validate(data)
+            return cast(dict[str, Any], data)["result"]
+        return cast(Any, data)
+
+    async def run_query(self, sql: str) -> QueryResult:
+        return QueryResult.model_validate(await self.call_tool("run_query", {"sql": sql}))
 
 
 @asynccontextmanager
