@@ -44,8 +44,18 @@ already hold most of what this needs, except the RL side.
 
 ## ADR-001: Name (settled)
 
-**Decision:** `anaylisists`, for the folder, the repo and the Hub listing.
-Arthur chose it on 2026-11-03.
+**Decision:** `flight-analysts`, for the folder, the repo and the Hub
+listing. Arthur, 2026-11-03: "didnt i say flight analyststs", read as
+`flight-analysts`.
+
+**History:** earlier the same day, the name was recorded as `anaylisists`,
+from Arthur's answer to the name question and to a spelling check that
+repeated it. The folder and the docs were renamed after slice 2.
+
+**Not Project 10.** Project 10 is AI Flight School (`ai-flight-school`), a
+flight simulator for AI agents. This project is an RL environment for a
+data-analyst agent over Pagila, a DVD-rental database; the name doesn't
+mean flight data. The README says so in its first lines.
 
 **Rejected:** `sql-analyst-env`, `rl-analyst-env`, `pagila-analyst-env`.
 
@@ -426,7 +436,7 @@ would drift apart.
 
 | # | Decision | Rejected | Status |
 |---|---|---|---|
-| 001 | Name `anaylisists` | sql-analyst-env, rl-analyst-env, pagila-analyst-env | **Settled** |
+| 001 | Name `flight-analysts` (was `anaylisists`) | sql-analyst-env, rl-analyst-env, pagila-analyst-env | **Settled** |
 | 002 | verifiers v1, exact pin, `--no-push` | v0, Inspect task, SkyRL format, Gymnasium, own loop | **Settled** |
 | 003 | Cite `sql-agent-gym`; claim the combination, not the idea | Claiming anti-hacking as new | Open |
 | 004 | Local pinned MCP-backbone over HTTP, via the harness's repro compose | Live server, in-process, SQLite, paid sandbox | Open |

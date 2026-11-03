@@ -48,7 +48,7 @@ the plan.
 - `.github/workflows/ci.yml`, README with a layout section, `docs/guide.md`;
 - `compose.yaml`: the harness's repro by git context at a pinned commit,
   plus our `copies` service;
-- `anaylisists/data/make_copies.sql`: the seeded copy script;
+- `stack/make_copies.sql`: the seeded copy script;
 - `tasks/public.yaml`: the 40 reused tasks, with `family`, `split`,
   `ordered`, a second SQL and a wrong reading each;
 - `tests/test_task_checks.py`: C1–C7 for every task.
