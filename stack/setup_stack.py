@@ -13,8 +13,8 @@ perturbed copies of Pagila (ADR-009) and one workspace per copy.
    with make_copies.sql, each from its own seed.
 3. Give each copy its own read-only role.
 4. Migrate MCP-backbone's bookkeeping database.
-5. Seed one workspace per copy, with raised limits, and write their keys
-   to /out/keys.json.
+5. Seed one workspace per copy (and one on stock Pagila, for the cheat
+   suite), with raised limits, and write their keys to /out/keys.json.
 
 Runs once; a second run is a no-op, and a run that stopped halfway
 starts over. Writes /out/mcp.env for serve.sh.
@@ -58,6 +58,10 @@ COPIES: dict[str, dict[str, str]] = {
     },
 }
 
+# Stock Pagila gets a workspace too, for the cheat suite only: its answers
+# are what a model that memorised public Pagila would give (ADR-006).
+STOCK = "pagila"
+
 # Far above what a full task-check run or a baseline uses in an hour, but
 # still a limit: a runaway loop gets stopped by MCP-backbone itself.
 QUERIES_PER_HOUR = 100_000
@@ -84,12 +88,12 @@ def make_copy(name: str, params: dict[str, str]) -> None:
 
 
 async def provision_roles() -> dict[str, str]:
-    """A read-only role per copy, so a workspace's login can only reach
-    its own copy. Returns each copy's connection URL."""
+    """A read-only role per database, so a workspace's login can only reach
+    its own copy. Returns each database's connection URL."""
     from scripts.provision_readonly_role import provision
 
     urls: dict[str, str] = {}
-    for name in COPIES:
+    for name in (*COPIES, STOCK):
         role = f"{name}_ro"
         password = await provision(f"{ADMIN}/{name}", role, name, "public")
         urls[name] = f"postgresql+asyncpg://{role}:{password}@db:5432/{name}"
@@ -158,7 +162,7 @@ def main() -> int:
     print("== migrating the bookkeeping database")
     subprocess.run(["alembic", "upgrade", "head"], cwd="/app", check=True)
 
-    print("== seeding one workspace per copy")
+    print("== seeding one workspace per database")
     keys = asyncio.run(seed_workspaces(urls))
     (OUT / "keys.json").write_text(json.dumps(keys))
     DONE.write_text(f"pagila {commit}\n")
