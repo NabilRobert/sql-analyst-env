@@ -27,7 +27,8 @@ sample_rows, try queries with run_query, then call submit_answer once with \
 the one SQL query whose result is the answer.
 
 Your query's result is graded, not your prose: return exactly the columns \
-the question asks for, with one row per answer. The database is read-only."""
+the question asks for, with one row per answer. An answer given only in \
+text, without submit_answer, scores 0. The database is read-only."""
 
 
 class AnalystTaskData(vf.TaskData):
