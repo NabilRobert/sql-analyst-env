@@ -1,0 +1,558 @@
+# The public tasks: train and dev splits only (ADR-007). Held-out tasks live
+# in tasks/private/, which git ignores (ADR-009).
+#
+# The first 40 are reused. e01-h10 are MCP-backbone's 30 benchmark questions,
+# as agent-eval-harness carries them (suites/pagila.source.yaml at commit
+# a44cad4); x01-x10 are the harness's own. Prompts and reference SQL are kept
+# verbatim unless a comment says otherwise. alternative_sql and wrong_sql are
+# new, for task checks C6 and C7 (analyst_env/task_checks.py).
+suite: analyst-env-public
+version: 1
+description: Business questions over a perturbed Pagila, answered through MCP-backbone.
+# Do not train on this file. Canary GUID, to spot it in training data:
+canary: ec2d5d8f-8935-4879-8935-011bbb5bfc9e
+tasks:
+- id: e01
+  tags: [easy]
+  family: counting
+  split: train
+  source: mcp-backbone
+  prompt: How many films are in the database?
+  reference_sql: select count(*) from film
+  alternative_sql: select count(distinct film_id) from film
+  # Counts copies on the shelves, not titles.
+  wrong_sql: select count(*) from inventory
+- id: e02
+  tags: [easy]
+  family: counting
+  split: train
+  source: mcp-backbone
+  prompt: How many films are rated 'R'?
+  reference_sql: select count(*) from film where rating = 'R'
+  alternative_sql: select sum(case when rating = 'R' then 1 else 0 end) from film
+  # Reads "rated R" as "R or stricter".
+  wrong_sql: select count(*) from film where rating in ('R', 'NC-17')
+- id: e03
+  tags: [easy]
+  family: counting
+  split: train
+  source: mcp-backbone
+  prompt: How many actors are there?
+  reference_sql: select count(*) from actor
+  alternative_sql: select count(distinct actor_id) from actor
+  # Counts only actors credited in a film.
+  wrong_sql: select count(distinct actor_id) from film_actor
+- id: e04
+  tags: [easy]
+  family: aggregates
+  split: train
+  source: mcp-backbone
+  prompt: What is the average film length in minutes, rounded to 2 decimal places?
+  reference_sql: select round(avg(length), 2) from film
+  alternative_sql: select round(sum(length)::numeric / count(length), 2) from film
+  # Rounds to whole minutes.
+  wrong_sql: select round(avg(length)) from film
+- id: e05
+  tags: [easy]
+  family: counting
+  split: train
+  source: mcp-backbone
+  prompt: How many films have a rental rate of 4.99?
+  reference_sql: select count(*) from film where rental_rate = 4.99
+  alternative_sql: select count(*) from film where rental_rate between 4.985 and 4.995
+  # Counts copies, not titles.
+  wrong_sql: select count(*) from inventory i join film f on f.film_id = i.film_id where f.rental_rate
+    = 4.99
+- id: e06
+  tags: [easy]
+  family: aggregates
+  split: train
+  source: mcp-backbone
+  prompt: What is the length in minutes of the longest film?
+  reference_sql: select max(length) from film
+  alternative_sql: select length from film where length is not null order by length desc limit 1
+  # Gives hours, not minutes.
+  wrong_sql: select max(length) / 60.0 from film
+- id: e07
+  tags: [easy]
+  family: counting
+  split: train
+  source: mcp-backbone
+  prompt: How many countries are there?
+  reference_sql: select count(*) from country
+  alternative_sql: select count(distinct country) from country
+  # Counts only countries that have a city.
+  wrong_sql: select count(distinct country_id) from city
+- id: e08
+  tags: [easy]
+  family: aggregates
+  split: train
+  source: mcp-backbone
+  prompt: What is the total of all payment amounts?
+  reference_sql: select sum(amount) from payment
+  alternative_sql: select sum(total) from (select customer_id, sum(amount) as total from payment group
+    by customer_id) t
+  # Adds up list prices of rentals instead of what was paid.
+  wrong_sql: select sum(f.rental_rate) from rental r join inventory i on i.inventory_id = r.inventory_id
+    join film f on f.film_id = i.film_id
+- id: e09
+  tags: [easy]
+  family: counting
+  split: train
+  source: mcp-backbone
+  prompt: How many films have a replacement cost greater than 25?
+  reference_sql: select count(*) from film where replacement_cost > 25
+  alternative_sql: select count(*) from film where not replacement_cost <= 25
+  # Treats 24.99 as "about 25".
+  wrong_sql: select count(*) from film where replacement_cost >= 24.99
+- id: e10
+  tags: [easy]
+  family: counting
+  split: train
+  source: mcp-backbone
+  prompt: How many rentals have not been returned yet?
+  reference_sql: select count(*) from rental where return_date is null
+  alternative_sql: select count(*) - count(return_date) from rental
+  # Counts rentals with no payment instead.
+  wrong_sql: select count(*) from rental r where not exists (select 1 from payment p where p.rental_id
+    = r.rental_id)
+- id: m01
+  tags: [medium]
+  family: grouping
+  split: train
+  source: mcp-backbone
+  prompt: How many films are there for each rating?
+  reference_sql: select rating, count(*) from film group by rating
+  alternative_sql: select f.rating, count(f.film_id) from film f group by f.rating
+  # Counts copies per rating.
+  wrong_sql: select f.rating, count(*) from inventory i join film f on f.film_id = i.film_id group by
+    f.rating
+- id: m02
+  tags: [medium]
+  family: grouping
+  split: train
+  source: mcp-backbone
+  prompt: How many films are there in each language? Give the language name and the count.
+  reference_sql: select l.name, count(*) from film f join language l on l.language_id = f.language_id
+    group by l.name
+  alternative_sql: select l.name, count(*) from language l join film f using (language_id) group by l.language_id,
+    l.name
+  # Groups by the film's original language, which is mostly empty.
+  wrong_sql: select l.name, count(*) from film f left join language l on l.language_id = f.original_language_id
+    group by l.name
+- id: m03
+  tags: [medium]
+  family: joins
+  split: train
+  source: mcp-backbone
+  prompt: How many films are in the 'Action' category?
+  reference_sql: select count(*) from film_category fc join category c on c.category_id = fc.category_id
+    where c.name = 'Action'
+  alternative_sql: select count(distinct f.film_id) from film f join film_category fc on fc.film_id = f.film_id
+    join category c on c.category_id = fc.category_id where c.name = 'Action'
+  # Counts copies of Action films.
+  wrong_sql: select count(*) from inventory i join film_category fc on fc.film_id = i.film_id join category
+    c on c.category_id = fc.category_id where c.name = 'Action'
+- id: m04
+  tags: [medium]
+  family: dates
+  split: train
+  source: mcp-backbone
+  prompt: How many rentals were made in 2025 (UTC)?
+  reference_sql: select count(*) from rental where (rental_date at time zone 'UTC') >= '2025-01-01' and
+    (rental_date at time zone 'UTC') < '2026-01-01'
+  alternative_sql: select count(*) from rental where rental_date >= timestamptz '2025-01-01 00:00:00+00'
+    and rental_date < timestamptz '2026-01-01 00:00:00+00'
+  # Counts payments made in 2025 instead.
+  wrong_sql: select count(*) from payment where payment_date >= timestamptz '2025-01-01 00:00:00+00' and
+    payment_date < timestamptz '2026-01-01 00:00:00+00'
+- id: m05
+  tags: [medium]
+  family: grouping
+  split: train
+  source: mcp-backbone
+  prompt: What is the average rental rate for each rating, rounded to 2 decimal places?
+  reference_sql: select rating, round(avg(rental_rate), 2) from film group by rating
+  alternative_sql: select rating, round(sum(rental_rate) / count(*), 2) from film group by rating
+  # Averages over rentals, so popular films weigh more.
+  wrong_sql: select f.rating, round(avg(f.rental_rate), 2) from rental r join inventory i on i.inventory_id
+    = r.inventory_id join film f on f.film_id = i.film_id group by f.rating
+- id: m06
+  tags: [medium]
+  family: counting
+  split: train
+  source: mcp-backbone
+  prompt: How many films has the actor with actor_id 1 appeared in?
+  reference_sql: select count(*) from film_actor where actor_id = 1
+  alternative_sql: select count(distinct f.film_id) from film f join film_actor fa on fa.film_id = f.film_id
+    where fa.actor_id = 1
+  # Counts copies of those films.
+  wrong_sql: select count(*) from film_actor fa join inventory i on i.film_id = fa.film_id where fa.actor_id
+    = 1
+- id: m07
+  tags: [medium]
+  family: dates
+  split: train
+  source: mcp-backbone
+  prompt: What is the total payment amount for each year (UTC)? Give the year and the total.
+  reference_sql: select extract(year from payment_date at time zone 'UTC')::int, sum(amount) from payment
+    group by 1
+  alternative_sql: select date_part('year', payment_date at time zone 'UTC')::int as year, sum(amount)
+    from payment group by year
+  # Groups by the year of the rental, not of the payment.
+  wrong_sql: select extract(year from r.rental_date at time zone 'UTC')::int, sum(p.amount) from payment
+    p join rental r on r.rental_id = p.rental_id group by 1
+- id: m08
+  tags: [medium]
+  family: joins
+  split: train
+  source: mcp-backbone
+  prompt: How many cities are in the country 'Canada'?
+  reference_sql: select count(*) from city ci join country co on co.country_id = ci.country_id where co.country
+    = 'Canada'
+  alternative_sql: select count(*) from city where country_id = (select country_id from country where
+    country = 'Canada')
+  # Counts customers in Canada instead.
+  wrong_sql: select count(*) from customer cu join address a on a.address_id = cu.address_id join city
+    ci on ci.city_id = a.city_id join country co on co.country_id = ci.country_id where co.country = 'Canada'
+- id: m09
+  tags: [medium]
+  family: ranking
+  split: train
+  source: mcp-backbone
+  prompt: Which film category has the fewest films, and how many does it have?
+  reference_sql: select c.name, count(*) from film_category fc join category c on c.category_id = fc.category_id
+    group by c.name order by count(*) asc limit 1
+  alternative_sql: select c.name, count(*) from category c join film_category fc using (category_id) group
+    by c.name having count(*) = (select min(n) from (select count(*) as n from film_category group by
+    category_id) t)
+  # Counts copies per category.
+  wrong_sql: select c.name, count(*) from inventory i join film_category fc on fc.film_id = i.film_id join
+    category c on c.category_id = fc.category_id group by c.name order by count(*) asc limit 1
+- id: m10
+  tags: [medium]
+  family: counting
+  split: train
+  source: mcp-backbone
+  prompt: How many distinct customers have rented at least one film?
+  reference_sql: select count(distinct customer_id) from rental
+  alternative_sql: select count(*) from customer c where exists (select 1 from rental r where r.customer_id
+    = c.customer_id)
+  # Counts rentals, not customers.
+  wrong_sql: select count(*) from rental
+- id: h01
+  tags: [hard]
+  family: ranking
+  split: train
+  source: mcp-backbone
+  prompt: Who are the top 5 customers by total payment amount? Give customer_id and the total.
+  reference_sql: select customer_id, sum(amount) as total from payment group by customer_id order by total
+    desc limit 5
+  alternative_sql: select customer_id, total from (select customer_id, sum(amount) as total, rank() over
+    (order by sum(amount) desc) as rk from payment group by customer_id) t where rk <= 5
+  # Ranks by number of payments, not their total.
+  wrong_sql: select customer_id, count(*) from payment group by customer_id order by 2 desc, 1 limit 5
+- id: h02
+  tags: [hard]
+  family: ranking
+  split: train
+  source: mcp-backbone
+  prompt: What are the 3 most rented films? Give the title and the number of rentals.
+  reference_sql: select f.title, count(*) as n from rental r join inventory i on i.inventory_id = r.inventory_id
+    join film f on f.film_id = i.film_id group by f.film_id, f.title order by n desc limit 3
+  alternative_sql: select title, n from (select f.title, count(*) as n, rank() over (order by count(*)
+    desc) as rk from rental r join inventory i on i.inventory_id = r.inventory_id join film f on f.film_id
+    = i.film_id group by f.film_id, f.title) t where rk <= 3
+  # Ranks by copies on the shelves.
+  wrong_sql: select f.title, count(*) from inventory i join film f on f.film_id = i.film_id group by f.film_id,
+    f.title order by 2 desc, 1 limit 3
+- id: h03
+  tags: [hard]
+  family: joins
+  split: train
+  source: mcp-backbone
+  prompt: Which film category has generated the most payment revenue, and how much? Count a film's full
+    revenue toward every category it belongs to.
+  reference_sql: select c.name, sum(p.amount) as revenue from payment p join rental r on r.rental_id =
+    p.rental_id join inventory i on i.inventory_id = r.inventory_id join film_category fc on fc.film_id
+    = i.film_id join category c on c.category_id = fc.category_id group by c.name order by revenue desc
+    limit 1
+  alternative_sql: with revenue as (select fc.category_id, sum(p.amount) as total from payment p join rental
+    r using (rental_id) join inventory i using (inventory_id) join film_category fc using (film_id) group
+    by fc.category_id) select c.name, rv.total from revenue rv join category c using (category_id) where
+    rv.total = (select max(total) from revenue)
+  # Splits a film's revenue across its categories, the reading the prompt rules out.
+  wrong_sql: select c.name, round(sum(p.amount / k.n), 2) as revenue from payment p join rental r on r.rental_id
+    = p.rental_id join inventory i on i.inventory_id = r.inventory_id join film_category fc on fc.film_id
+    = i.film_id join (select film_id, count(*) as n from film_category group by film_id) k on k.film_id
+    = i.film_id join category c on c.category_id = fc.category_id group by c.name order by revenue desc
+    limit 1
+- id: h04
+  tags: [hard]
+  family: aggregates
+  split: train
+  source: mcp-backbone
+  prompt: What is the average number of rentals per customer, counting only customers who have rented
+    at least once, rounded to 2 decimal places?
+  reference_sql: select round(count(*)::numeric / count(distinct customer_id), 2) from rental
+  alternative_sql: select round(avg(n), 2) from (select customer_id, count(*)::numeric as n from rental
+    group by customer_id) t
+  # Averages payments per customer instead of rentals.
+  wrong_sql: select round(count(*)::numeric / count(distinct customer_id), 2) from payment
+- id: h05
+  tags: [hard]
+  family: set_logic
+  split: train
+  source: mcp-backbone
+  prompt: How many films have never been rented?
+  reference_sql: select count(*) from film f where not exists (select 1 from inventory i join rental r
+    on r.inventory_id = i.inventory_id where i.film_id = f.film_id)
+  alternative_sql: select count(*) from film where film_id not in (select i.film_id from inventory i join
+    rental r on r.inventory_id = i.inventory_id)
+  # Counts copies never rented, not films.
+  wrong_sql: select count(*) from inventory i where not exists (select 1 from rental r where r.inventory_id
+    = i.inventory_id)
+- id: h06
+  tags: [hard]
+  family: dates
+  split: train
+  source: mcp-backbone
+  prompt: In which month (as YYYY-MM, UTC) were the most rentals made, and how many?
+  reference_sql: select to_char(rental_date at time zone 'UTC', 'YYYY-MM') as m, count(*) as n from rental
+    group by m order by n desc limit 1
+  alternative_sql: select m, n from (select to_char(date_trunc('month', rental_date at time zone 'UTC'),
+    'YYYY-MM') as m, count(*) as n, rank() over (order by count(*) desc) as rk from rental group by 1)
+    t where rk = 1
+  # Uses payments instead of rentals.
+  wrong_sql: select to_char(payment_date at time zone 'UTC', 'YYYY-MM') as m, count(*) as n from payment
+    group by m order by n desc limit 1
+- id: h07
+  tags: [hard]
+  family: grouping
+  split: train
+  source: mcp-backbone
+  prompt: How many customers have made more than 60 rentals?
+  reference_sql: select count(*) from (select customer_id from rental group by customer_id having count(*)
+    > 60) t
+  alternative_sql: select count(distinct customer_id) from (select customer_id, count(*) over (partition
+    by customer_id) as n from rental) t where n > 60
+  # Reads "more than 60" as "60 or more".
+  wrong_sql: select count(*) from (select customer_id from rental group by customer_id having count(*)
+    >= 60) t
+- id: h08
+  tags: [hard]
+  family: aggregates
+  split: train
+  source: mcp-backbone
+  prompt: How many films are longer than the average film length?
+  reference_sql: select count(*) from film where length > (select avg(length) from film)
+  alternative_sql: with a as (select avg(length) as av from film) select count(*) from film, a where film.length
+    > a.av
+  # Compares with the average rounded to whole minutes, counting ties.
+  wrong_sql: select count(*) from film where length >= (select round(avg(length)) from film)
+- id: h09
+  tags: [hard]
+  family: ranking
+  split: train
+  source: mcp-backbone
+  # Prompt and reference SQL adapted: on a perturbed copy two actors can tie
+  # for the most films (an earlier copy seed failed task check C3), so the
+  # question asks for all of them, and the reference SQL uses rank().
+  prompt: Which actor has appeared in the most films? If several tie, give them all. Give first name, last
+    name and the number of films.
+  reference_sql: select first_name, last_name, n from (select a.first_name, a.last_name, count(*) as n,
+    rank() over (order by count(*) desc) as rk from actor a join film_actor fa on fa.actor_id = a.actor_id
+    group by a.actor_id, a.first_name, a.last_name) t where rk = 1
+  alternative_sql: with credits as (select actor_id, count(*) as n from film_actor group by actor_id) select
+    a.first_name, a.last_name, c.n from credits c join actor a using (actor_id) where c.n = (select max(n)
+    from credits)
+  # Ranks by rentals of the actor's films.
+  wrong_sql: select a.first_name, a.last_name, count(*) as n from actor a join film_actor fa on fa.actor_id
+    = a.actor_id join inventory i on i.film_id = fa.film_id join rental r on r.inventory_id = i.inventory_id
+    group by a.actor_id, a.first_name, a.last_name order by n desc limit 1
+- id: h10
+  tags: [hard]
+  family: ranking
+  split: train
+  source: mcp-backbone
+  prompt: Which customer has spent the most in total? Give first name, last name and the total.
+  reference_sql: select c.first_name, c.last_name, sum(p.amount) as total from customer c join payment
+    p on p.customer_id = c.customer_id group by c.customer_id, c.first_name, c.last_name order by total
+    desc limit 1
+  alternative_sql: select c.first_name, c.last_name, t.total from customer c join (select customer_id,
+    sum(amount) as total from payment group by customer_id) t using (customer_id) where t.total = (select
+    max(s) from (select sum(amount) as s from payment group by customer_id) m)
+  # Ranks by number of payments.
+  wrong_sql: select c.first_name, c.last_name, count(*) as total from customer c join payment p on p.customer_id
+    = c.customer_id group by c.customer_id, c.first_name, c.last_name order by total desc limit 1
+- id: x01
+  tags: [expert]
+  family: joins
+  split: train
+  source: agent-eval-harness
+  prompt: Which store took the most payment revenue? Count each payment toward the store of the staff
+    member who processed it. Give the store_id and the total.
+  reference_sql: select st.store_id, sum(p.amount) from payment p join staff st on st.staff_id = p.staff_id
+    group by st.store_id order by 2 desc limit 1
+  alternative_sql: select store_id, total from (select st.store_id, sum(p.amount) as total from staff
+    st join payment p using (staff_id) group by st.store_id) t where total = (select max(s) from (select
+    sum(p.amount) as s from staff st join payment p using (staff_id) group by st.store_id) m)
+  # Uses the customer's home store, the reading the prompt rules out.
+  wrong_sql: select cu.store_id, sum(p.amount) from payment p join customer cu on cu.customer_id = p.customer_id
+    group by cu.store_id order by 2 desc limit 1
+- id: x02
+  tags: [expert]
+  family: windows
+  split: train
+  source: agent-eval-harness
+  prompt: For each film rating, which film was rented the most times? If two films tie, give the one whose
+    title comes first alphabetically. Give the rating, the title and the number of rentals.
+  reference_sql: select rating, title, n from (select f.rating, f.title, count(*) as n, row_number() over
+    (partition by f.rating order by count(*) desc, f.title asc) as rk from rental r join inventory i on
+    i.inventory_id = r.inventory_id join film f on f.film_id = i.film_id group by f.film_id, f.rating,
+    f.title) t where rk = 1
+  alternative_sql: select distinct on (f.rating) f.rating, f.title, count(*) as n from rental r join inventory
+    i on i.inventory_id = r.inventory_id join film f on f.film_id = i.film_id group by f.film_id, f.rating,
+    f.title order by f.rating, count(*) desc, f.title
+  # Ranks by copies on the shelves.
+  wrong_sql: select rating, title, n from (select f.rating, f.title, count(*) as n, row_number() over
+    (partition by f.rating order by count(*) desc, f.title asc) as rk from inventory i join film f on f.film_id
+    = i.film_id group by f.film_id, f.rating, f.title) t where rk = 1
+- id: x03
+  tags: [expert]
+  family: business_definitions
+  split: train
+  source: agent-eval-harness
+  prompt: What percentage of returned rentals came back late, meaning returned more than the film's rental_duration
+    days after being rented? Round to 2 decimal places.
+  reference_sql: select round(100.0 * count(*) filter (where r.return_date > r.rental_date + f.rental_duration
+    * interval '1 day') / count(*), 2) from rental r join inventory i on i.inventory_id = r.inventory_id
+    join film f on f.film_id = i.film_id where r.return_date is not null
+  alternative_sql: select round(100.0 * sum(case when r.return_date - r.rental_date > make_interval(days
+    => f.rental_duration) then 1 else 0 end) / count(*), 2) from rental r join inventory i on i.inventory_id
+    = r.inventory_id join film f on f.film_id = i.film_id where r.return_date is not null
+  # Divides by every rental, returned or not.
+  wrong_sql: select round(100.0 * count(*) filter (where r.return_date > r.rental_date + f.rental_duration
+    * interval '1 day') / count(*), 2) from rental r join inventory i on i.inventory_id = r.inventory_id
+    join film f on f.film_id = i.film_id
+- id: x04
+  tags: [expert]
+  family: set_logic
+  split: train
+  source: agent-eval-harness
+  prompt: How many customers have rented at least one film from every film category?
+  reference_sql: select count(*) from (select r.customer_id from rental r join inventory i on i.inventory_id
+    = r.inventory_id join film_category fc on fc.film_id = i.film_id group by r.customer_id having count(distinct
+    fc.category_id) = (select count(*) from category)) t
+  alternative_sql: with pairs as (select distinct r.customer_id, fc.category_id from rental r join inventory
+    i using (inventory_id) join film_category fc using (film_id)) select count(*) from (select customer_id
+    from pairs group by customer_id having count(*) = (select count(*) from category)) t
+  # Drops "every": counts customers who rented anything.
+  wrong_sql: select count(distinct r.customer_id) from rental r join inventory i on i.inventory_id = r.inventory_id
+    join film_category fc on fc.film_id = i.film_id
+- id: x05
+  tags: [expert]
+  family: joins
+  split: train
+  source: agent-eval-harness
+  prompt: Which country has the most customers, going by each customer's address, and how many customers
+    does it have?
+  reference_sql: select co.country, count(*) from customer cu join address a on a.address_id = cu.address_id
+    join city ci on ci.city_id = a.city_id join country co on co.country_id = ci.country_id group by co.country
+    order by 2 desc limit 1
+  alternative_sql: select country, n from (select co.country, count(*) as n, rank() over (order by count(*)
+    desc) as rk from country co join city ci using (country_id) join address a using (city_id) join customer
+    cu using (address_id) group by co.country) t where rk = 1
+  # Counts addresses, which include staff and stores, not customers.
+  wrong_sql: select co.country, count(*) from address a join city ci on ci.city_id = a.city_id join country
+    co on co.country_id = ci.country_id group by co.country order by 2 desc limit 1
+- id: x06
+  tags: [expert]
+  family: ranking
+  split: train
+  source: agent-eval-harness
+  prompt: Which actor's films have brought in the most payment revenue? Count a payment toward every actor
+    in the rented film. Give first name, last name and the total.
+  reference_sql: select a.first_name, a.last_name, sum(p.amount) from payment p join rental r on r.rental_id
+    = p.rental_id join inventory i on i.inventory_id = r.inventory_id join film_actor fa on fa.film_id
+    = i.film_id join actor a on a.actor_id = fa.actor_id group by a.actor_id, a.first_name, a.last_name
+    order by 3 desc limit 1
+  alternative_sql: with film_revenue as (select i.film_id, sum(p.amount) as revenue from payment p join
+    rental r on r.rental_id = p.rental_id join inventory i on i.inventory_id = r.inventory_id group by i.film_id),
+    actor_revenue as (select fa.actor_id, sum(fr.revenue) as total from film_actor fa join film_revenue
+    fr on fr.film_id = fa.film_id group by fa.actor_id) select a.first_name, a.last_name, ar.total from
+    actor_revenue ar join actor a on a.actor_id = ar.actor_id where ar.total = (select max(total) from actor_revenue)
+  # Ranks by number of rentals, not revenue.
+  wrong_sql: select a.first_name, a.last_name, count(*) from payment p join rental r on r.rental_id = p.rental_id
+    join inventory i on i.inventory_id = r.inventory_id join film_actor fa on fa.film_id = i.film_id join
+    actor a on a.actor_id = fa.actor_id group by a.actor_id, a.first_name, a.last_name order by 3 desc limit
+    1
+- id: x07
+  tags: [expert]
+  family: dates
+  split: train
+  source: agent-eval-harness
+  prompt: How many customers made their very first rental in 2023 (UTC)?
+  reference_sql: select count(*) from (select customer_id, min(rental_date at time zone 'UTC') as first_rental
+    from rental group by customer_id) t where first_rental >= '2023-01-01' and first_rental < '2024-01-01'
+  alternative_sql: select count(distinct r.customer_id) from rental r where r.rental_date >= timestamptz
+    '2023-01-01 00:00:00+00' and r.rental_date < timestamptz '2024-01-01 00:00:00+00' and not exists (select
+    1 from rental e where e.customer_id = r.customer_id and e.rental_date < timestamptz '2023-01-01 00:00:00+00')
+  # Drops "very first": counts anyone who rented in 2023.
+  wrong_sql: select count(distinct customer_id) from rental where rental_date >= timestamptz '2023-01-01
+    00:00:00+00' and rental_date < timestamptz '2024-01-01 00:00:00+00'
+- id: x08
+  tags: [expert]
+  family: windows
+  split: train
+  source: agent-eval-harness
+  prompt: On average, how many days pass between a customer's consecutive rentals? Average over every
+    pair of consecutive rentals by the same customer, rounded to 2 decimal places.
+  reference_sql: select round(avg(extract(epoch from gap) / 86400)::numeric, 2) from (select rental_date
+    - lag(rental_date) over (partition by customer_id order by rental_date) as gap from rental) t where
+    gap is not null
+  # The gaps of one customer add up to their last rental minus their first,
+  # so the average over all pairs needs no window function.
+  alternative_sql: select round((sum(extract(epoch from last_rental - first_rental)) / 86400 / sum(n -
+    1))::numeric, 2) from (select customer_id, min(rental_date) as first_rental, max(rental_date) as last_rental,
+    count(*) as n from rental group by customer_id having count(*) > 1) t
+  # Averages each customer's average, so every customer weighs the same.
+  wrong_sql: select round(avg(extract(epoch from last_rental - first_rental) / 86400 / (n - 1))::numeric,
+    2) from (select customer_id, min(rental_date) as first_rental, max(rental_date) as last_rental, count(*)
+    as n from rental group by customer_id having count(*) > 1) t
+- id: x09
+  tags: [expert]
+  family: grouping
+  split: train
+  source: agent-eval-harness
+  prompt: Among film categories with at least 50 films, which has the highest average rental rate? Give
+    the category name and the average rounded to 2 decimal places.
+  reference_sql: select c.name, round(avg(f.rental_rate), 2) from film f join film_category fc on fc.film_id
+    = f.film_id join category c on c.category_id = fc.category_id group by c.name having count(*) >= 50
+    order by avg(f.rental_rate) desc limit 1
+  alternative_sql: select name, round(av, 2) from (select c.name, avg(f.rental_rate) as av, count(*) as
+    n from category c join film_category fc using (category_id) join film f using (film_id) group by c.name)
+    t where n >= 50 and av = (select max(av2) from (select avg(f.rental_rate) as av2 from film_category
+    fc join film f using (film_id) group by fc.category_id having count(*) >= 50) m)
+  # Averages over rentals, so popular films weigh more.
+  wrong_sql: select c.name, round(avg(f.rental_rate), 2) from rental r join inventory i on i.inventory_id
+    = r.inventory_id join film f on f.film_id = i.film_id join film_category fc on fc.film_id = f.film_id
+    join category c on c.category_id = fc.category_id group by c.name having count(distinct f.film_id) >=
+    50 order by avg(f.rental_rate) desc limit 1
+- id: x10
+  tags: [expert]
+  family: windows
+  split: train
+  source: agent-eval-harness
+  prompt: Which month (as YYYY-MM, UTC) saw the largest increase in the number of rentals compared with
+    the previous month, and how large was the increase?
+  reference_sql: select m, inc from (select m, n - lag(n) over (order by m) as inc from (select to_char(rental_date
+    at time zone 'UTC', 'YYYY-MM') as m, count(*) as n from rental group by m) t) u where inc is not null
+    order by inc desc limit 1
+  alternative_sql: with increases as (select to_char(mo, 'YYYY-MM') as m, n - lag(n) over (order by mo)
+    as inc from (select date_trunc('month', rental_date at time zone 'UTC') as mo, count(*) as n from rental
+    group by 1) t) select m, inc from increases where inc = (select max(inc) from increases)
+  # Takes the largest change in either direction.
+  wrong_sql: select m, inc from (select m, n - lag(n) over (order by m) as inc from (select to_char(rental_date
+    at time zone 'UTC', 'YYYY-MM') as m, count(*) as n from rental group by m) t) u where inc is not null
+    order by abs(inc) desc limit 1

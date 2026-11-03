@@ -43,3 +43,6 @@ build/
 .DS_Store
 .idea/
 .vscode/
+
+# Held-out tasks never enter the repo (ADR-009)
+tasks/private/
