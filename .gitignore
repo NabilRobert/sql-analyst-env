@@ -1,0 +1,45 @@
+# Secrets: commit .env.example with placeholders only
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Private notes
+HANDOVER*.md
+backups/
+*.private.md
+
+# Database dumps and downloaded data
+*.dump
+*.sql.gz
+*.backup
+data/downloads/
+
+# Model weights and training checkpoints (never committed)
+*.gguf
+*.safetensors
+*.bin
+checkpoints/
+
+# Run outputs, logs and caches (one summary file is committed instead)
+outputs/
+logs/
+*.log
+.cache/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.pyright/
+dist/
+build/
+*.egg-info/
+
+# OS and editors
+.DS_Store
+.idea/
+.vscode/
