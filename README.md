@@ -11,13 +11,14 @@ tools, writes SQL and submits it. Code grades the answer: it must be right
 on the database the agent saw **and** on a hidden copy with different data,
 so a query that hard-codes the answer fails.
 
-**Status: slice 3 of 7.** The local stack, the two data copies, the 40
+**Status: slice 4 of 7.** The local stack, the two data copies, the 40
 reused tasks and their answer-key checks (slice 1); the environment on
 Prime Intellect's [`verifiers`](https://github.com/PrimeIntellect-ai/verifiers)
 v1, the reward, and a cheat suite of scripted policies that must fail to
 game it (slice 2); 60 new tasks, the train, dev and held-out splits, and a
-check that our grader agrees with agent-eval-harness's (slice 3). The plan
-is on the `docs/planning` branch.
+check that our grader agrees with agent-eval-harness's (slice 3);
+baselines for three small local models, in [RESULTS.md](RESULTS.md)
+(slice 4). The plan is on the `docs/planning` branch.
 
 **Please don't train on the tasks.** Each task file carries a canary GUID
 so leaked tasks can be spotted. The 30 held-out tasks aren't published.
@@ -39,6 +40,15 @@ rollouts through verifiers, with a scripted stand-in for the model.
 Every evaluation goes through `analyst_env/run_eval.py`, which switches
 off verifiers' paid defaults (uploads, hosted sandboxes, hosted models).
 
+To run a baseline, with [Ollama](https://ollama.com) installed and the
+model pulled:
+
+```bash
+OLLAMA_CONTEXT_LENGTH=16384 OLLAMA_NUM_PARALLEL=1 ollama serve
+uv run analyst-env baseline qwen3:1.7b dev   # writes runs/dev/qwen3-1.7b.json
+uv run analyst-env results                   # regenerates RESULTS.md
+```
+
 ## Layout
 
 ```
@@ -56,6 +66,9 @@ analyst_env/
   scoring.py          is the submitted query right on both copies?
   penalties.py        which refused queries cost reward
   run_eval.py         runs `vf-eval` locally, at $0
+  baselines.py        the three baseline models, their settings, one run
+  run_record.py       what a run leaves in runs/: numbers, no task text
+  results.py          RESULTS.md from the run records
   tasks.py            the task file's shape, and where the held-out file is
   backbone.py         the client for the local MCP-backbone
   task_checks.py      the seven answer-key checks
@@ -66,7 +79,10 @@ analyst_env/
 tests/                unit tests; tests/stack/ needs the stack running
   scripted/           scripted policies, a stand-in model server, an egress guard
   fixtures/           the harness's recorded verdicts, for the grader agreement test
+runs/                 one run record per model and split
+RESULTS.md            generated from runs/
 docs/guide.md         how it works, in plain English
+docs/rollout-review.md  the top-scoring tries, read by hand for new cheats
 ```
 
 ## Reused, not rebuilt
