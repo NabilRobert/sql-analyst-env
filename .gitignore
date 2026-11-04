@@ -44,5 +44,6 @@ build/
 .idea/
 .vscode/
 
-# Held-out tasks never enter the repo (ADR-009)
+# Held-out tasks live outside the repo (ADR-009); this keeps a stray copy
+# out of a commit
 tasks/private/

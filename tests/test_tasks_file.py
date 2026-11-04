@@ -1,15 +1,17 @@
-"""The public task file's shape. The answer keys themselves are checked
-against the stack in tests/stack/."""
+"""The public task file's shape (ADR-007). The answer keys themselves are
+checked against the stack in tests/stack/."""
 
-from pathlib import Path
+from collections import Counter
 
 import pytest
 from pydantic import ValidationError
 
-from analyst_env.tasks import TaskFile, load_task_file
+from analyst_env.tasks import HELDOUT_ONLY_FAMILIES, PUBLIC_TASKS, TaskFile, load_task_file
 
-PUBLIC_TASKS = Path(__file__).resolve().parents[1] / "tasks" / "public.yaml"
 EXPECTED_REUSED_TASKS = 40  # MCP-backbone's 30 plus agent-eval-harness's 10
+# ADR-007: train 60 (the 40 reused and 20 new) and dev 10, all public.
+EXPECTED_PUBLIC_SPLITS = {"train": 60, "dev": 10}
+EXPECTED_TEMPTING_TASKS = 3  # of 5; the other 2 are held out
 
 
 def test_public_file_holds_the_reused_tasks() -> None:
@@ -20,6 +22,26 @@ def test_public_file_holds_the_reused_tasks() -> None:
 
 def test_public_file_holds_no_held_out_task() -> None:
     assert all(task.split != "heldout" for task in load_task_file(PUBLIC_TASKS).tasks)
+
+
+def test_public_file_holds_train_60_and_dev_10() -> None:
+    splits = Counter(task.split for task in load_task_file(PUBLIC_TASKS).tasks)
+    assert splits == EXPECTED_PUBLIC_SPLITS
+
+
+def test_reused_tasks_are_all_train() -> None:
+    tasks = load_task_file(PUBLIC_TASKS).tasks
+    assert {task.split for task in tasks if task.source != "new"} == {"train"}
+
+
+def test_held_out_only_families_are_absent_from_the_public_file() -> None:
+    families = {task.family for task in load_task_file(PUBLIC_TASKS).tasks}
+    assert families.isdisjoint(HELDOUT_ONLY_FAMILIES)
+
+
+def test_public_file_holds_the_public_tempting_tasks() -> None:
+    tasks = load_task_file(PUBLIC_TASKS).tasks
+    assert sum(task.family == "tempting" for task in tasks) == EXPECTED_TEMPTING_TASKS
 
 
 def test_public_file_carries_the_canary() -> None:

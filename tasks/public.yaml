@@ -1,5 +1,5 @@
-# The public tasks: train and dev splits only (ADR-007). Held-out tasks live
-# in tasks/private/, which git ignores (ADR-009).
+# The public tasks: train and dev splits only (ADR-007). The 30 held-out tasks
+# are never in the repo (ADR-009); the gaps in the n01-n60 ids are theirs.
 #
 # The first 40 are reused. e01-h10 are MCP-backbone's 30 benchmark questions,
 # as agent-eval-harness carries them (suites/pagila.source.yaml at commit
@@ -556,3 +556,448 @@ tasks:
   wrong_sql: select m, inc from (select m, n - lag(n) over (order by m) as inc from (select to_char(rental_date
     at time zone 'UTC', 'YYYY-MM') as m, count(*) as n from rental group by m) t) u where inc is not null
     order by abs(inc) desc limit 1
+# n01-n60 are new (slice 3), written for this project; the held-out-only
+# families (null_handling, multi_step) are absent here by design.
+- id: n01
+  tags: [easy]
+  family: counting
+  split: train
+  source: new
+  prompt: How many films have 'Deleted Scenes' among their special features?
+  reference_sql: select count(*) from film where 'Deleted Scenes' = any(special_features)
+  alternative_sql: select count(*) from film where special_features @> array['Deleted Scenes']
+  # Counts only films whose one special feature is Deleted Scenes.
+  wrong_sql: select count(*) from film where special_features = array['Deleted Scenes']
+- id: n02
+  tags: [easy]
+  family: counting
+  split: dev
+  source: new
+  prompt: How many films rated 'PG-13' are longer than 150 minutes?
+  reference_sql: select count(*) from film where rating = 'PG-13' and length > 150
+  alternative_sql: select count(film_id) from film where rating::text = 'PG-13' and length >= 151
+  # Counts films of exactly 150 minutes too.
+  wrong_sql: select count(*) from film where rating = 'PG-13' and length >= 150
+- id: n04
+  tags: [medium]
+  family: counting
+  split: train
+  source: new
+  prompt: How many films are listed in more than one category?
+  reference_sql: select count(*) from (select film_id from film_category group by film_id having count(*) >
+    1) t
+  alternative_sql: select count(*) from film f where (select count(*) from film_category fc where fc.film_id
+    = f.film_id) >= 2
+  # Counts every film that has a category at all.
+  wrong_sql: select count(distinct film_id) from film_category
+- id: n05
+  tags: [easy]
+  family: aggregates
+  split: train
+  source: new
+  prompt: What is the average replacement cost of films rated 'G', rounded to 2 decimal places?
+  reference_sql: select round(avg(replacement_cost), 2) from film where rating = 'G'
+  alternative_sql: select round(sum(replacement_cost) / count(*), 2) from film where rating = 'G'
+  # Averages every film.
+  wrong_sql: select round(avg(replacement_cost), 2) from film
+- id: n07
+  tags: [medium]
+  family: aggregates
+  split: dev
+  source: new
+  prompt: What was the average payment amount in 2024 (UTC), rounded to 2 decimal places?
+  reference_sql: select round(avg(amount), 2) from payment where payment_date >= '2024-01-01 00:00:00+00'
+    and payment_date < '2025-01-01 00:00:00+00'
+  alternative_sql: select round(avg(amount), 2) from payment where extract(year from payment_date at time
+    zone 'UTC') = 2024
+  # Averages every year.
+  wrong_sql: select round(avg(amount), 2) from payment
+- id: n09
+  tags: [easy]
+  family: joins
+  split: train
+  source: new
+  prompt: How many rentals did the staff member Warner Hudson handle?
+  reference_sql: select count(*) from rental r join staff s on s.staff_id = r.staff_id where s.first_name =
+    'Warner' and s.last_name = 'Hudson'
+  alternative_sql: select count(*) from rental where staff_id = (select staff_id from staff where first_name
+    = 'Warner' and last_name = 'Hudson')
+  # Counts the payments he took instead.
+  wrong_sql: select count(*) from payment p join staff s on s.staff_id = p.staff_id where s.first_name =
+    'Warner' and s.last_name = 'Hudson'
+- id: n10
+  tags: [medium]
+  family: joins
+  split: train
+  source: new
+  prompt: How many different customers have rented at least one film in the 'Horror' category?
+  reference_sql: select count(distinct r.customer_id) from rental r join inventory i on i.inventory_id =
+    r.inventory_id join film_category fc on fc.film_id = i.film_id join category c on c.category_id =
+    fc.category_id where c.name = 'Horror'
+  alternative_sql: select count(*) from customer cu where exists (select 1 from rental r join inventory i
+    on i.inventory_id = r.inventory_id join film_category fc on fc.film_id = i.film_id join category c on
+    c.category_id = fc.category_id where r.customer_id = cu.customer_id and c.name = 'Horror')
+  # Counts Horror rentals, not customers.
+  wrong_sql: select count(*) from rental r join inventory i on i.inventory_id = r.inventory_id join
+    film_category fc on fc.film_id = i.film_id join category c on c.category_id = fc.category_id where
+    c.name = 'Horror'
+- id: n12
+  tags: [hard]
+  family: joins
+  split: dev
+  source: new
+  prompt: What is the total of all payments made by customers who live in India? Go by each customer's
+    address.
+  reference_sql: select sum(p.amount) from payment p join customer cu on cu.customer_id = p.customer_id join
+    address a on a.address_id = cu.address_id join city ci on ci.city_id = a.city_id join country co on
+    co.country_id = ci.country_id where co.country = 'India'
+  alternative_sql: select sum(amount) from payment where customer_id in (select cu.customer_id from customer
+    cu join address a on a.address_id = cu.address_id join city ci on ci.city_id = a.city_id join country
+    co on co.country_id = ci.country_id where co.country = 'India')
+  # Sums the rental rates of the films they rented, not what they paid.
+  wrong_sql: select sum(f.rental_rate) from rental r join inventory i on i.inventory_id = r.inventory_id
+    join film f on f.film_id = i.film_id join customer cu on cu.customer_id = r.customer_id join address a
+    on a.address_id = cu.address_id join city ci on ci.city_id = a.city_id join country co on co.country_id
+    = ci.country_id where co.country = 'India'
+- id: n13
+  tags: [expert]
+  family: joins
+  split: train
+  source: new
+  prompt: Which films has the customer with customer_id 442 rented more than once? Give the title and the
+    number of times they rented it.
+  reference_sql: select f.title, count(*) from rental r join inventory i on i.inventory_id = r.inventory_id
+    join film f on f.film_id = i.film_id where r.customer_id = 442 group by f.film_id, f.title having
+    count(*) > 1
+  alternative_sql: select title, n from (select i.film_id, count(*) as n from rental r join inventory i
+    using (inventory_id) where r.customer_id = 442 group by i.film_id) t join film f on f.film_id =
+    t.film_id where n >= 2
+  # Counts by copy in the inventory, so two different copies of one film don't add up.
+  wrong_sql: select f.title, count(*) from rental r join inventory i on i.inventory_id = r.inventory_id join
+    film f on f.film_id = i.film_id where r.customer_id = 442 group by i.inventory_id, f.title having
+    count(*) > 1
+- id: n15
+  tags: [medium]
+  family: grouping
+  split: train
+  source: new
+  prompt: What is the average film length in each category, rounded to 2 decimal places? A film in several
+    categories counts in each. Give the category name and the average.
+  reference_sql: select c.name, round(avg(f.length), 2) from category c join film_category fc on
+    fc.category_id = c.category_id join film f on f.film_id = fc.film_id group by c.name
+  alternative_sql: select c.name, round(sum(f.length)::numeric / count(f.length), 2) from film f join
+    film_category fc using (film_id) join category c on c.category_id = fc.category_id group by
+    c.category_id, c.name
+  # Weights each film by its number of copies in the inventory.
+  wrong_sql: select c.name, round(avg(f.length), 2) from category c join film_category fc on fc.category_id
+    = c.category_id join film f on f.film_id = fc.film_id join inventory i on i.film_id = f.film_id group by
+    c.name
+- id: n17
+  tags: [hard]
+  family: grouping
+  split: train
+  source: new
+  prompt: Which countries have at least 20 customers, going by each customer's address? Give the country and
+    the number of customers.
+  reference_sql: select co.country, count(*) from customer cu join address a on a.address_id = cu.address_id
+    join city ci on ci.city_id = a.city_id join country co on co.country_id = ci.country_id group by
+    co.country_id, co.country having count(*) >= 20
+  alternative_sql: select country, n from (select co.country, count(cu.customer_id) as n from country co
+    join city ci on ci.country_id = co.country_id join address a on a.city_id = ci.city_id join customer cu
+    on cu.address_id = a.address_id group by co.country) t where n >= 20
+  # Reads "at least 20" as more than 20.
+  wrong_sql: select co.country, count(*) from customer cu join address a on a.address_id = cu.address_id
+    join city ci on ci.city_id = a.city_id join country co on co.country_id = ci.country_id group by
+    co.country_id, co.country having count(*) > 20
+- id: n18
+  tags: [hard]
+  family: grouping
+  split: train
+  source: new
+  prompt: What was the total payment amount for each film rating in 2025 (UTC), going by the payment date?
+    Give the rating and the total.
+  reference_sql: select f.rating, sum(p.amount) from payment p join rental r on r.rental_id = p.rental_id
+    join inventory i on i.inventory_id = r.inventory_id join film f on f.film_id = i.film_id where
+    p.payment_date >= '2025-01-01 00:00:00+00' and p.payment_date < '2026-01-01 00:00:00+00' group by
+    f.rating
+  alternative_sql: select f.rating, sum(p.amount) from film f join inventory i using (film_id) join rental r
+    using (inventory_id) join payment p on p.rental_id = r.rental_id where extract(year from p.payment_date
+    at time zone 'UTC') = 2025 group by f.rating
+  # Goes by the rental date, not the payment date.
+  wrong_sql: select f.rating, sum(p.amount) from payment p join rental r on r.rental_id = p.rental_id join
+    inventory i on i.inventory_id = r.inventory_id join film f on f.film_id = i.film_id where r.rental_date
+    >= '2025-01-01 00:00:00+00' and r.rental_date < '2026-01-01 00:00:00+00' group by f.rating
+- id: n19
+  tags: [easy]
+  family: dates
+  split: dev
+  source: new
+  prompt: How many payments were made in March 2026 (UTC)?
+  reference_sql: select count(*) from payment where payment_date >= '2026-03-01 00:00:00+00' and
+    payment_date < '2026-04-01 00:00:00+00'
+  alternative_sql: select count(*) from payment where to_char(payment_date at time zone 'UTC', 'YYYY-MM') =
+    '2026-03'
+  # Counts March of every year.
+  wrong_sql: select count(*) from payment where extract(month from payment_date at time zone 'UTC') = 3
+- id: n21
+  tags: [medium]
+  family: dates
+  split: dev
+  source: new
+  prompt: At which hour of the day (0 to 23, UTC) are the most rentals made, over every year? Give the hour
+    and the number of rentals.
+  reference_sql: select extract(hour from rental_date at time zone 'UTC')::int as hour, count(*) as n from
+    rental group by 1 order by n desc limit 1
+  alternative_sql: select hour, n from (select date_part('hour', rental_date at time zone 'UTC')::int as
+    hour, count(*) as n, rank() over (order by count(*) desc) as rk from rental group by 1) t where rk = 1
+  # Goes by the hour the rentals came back.
+  wrong_sql: select extract(hour from return_date at time zone 'UTC')::int as hour, count(*) as n from rental
+    where return_date is not null group by 1 order by n desc limit 1
+- id: n22
+  tags: [hard]
+  family: dates
+  split: train
+  source: new
+  prompt: How many rentals made in 2025 (UTC) were returned in 2026 (UTC)?
+  reference_sql: select count(*) from rental where rental_date >= '2025-01-01 00:00:00+00' and rental_date <
+    '2026-01-01 00:00:00+00' and return_date >= '2026-01-01 00:00:00+00' and return_date < '2027-01-01
+    00:00:00+00'
+  alternative_sql: select count(*) from rental where extract(year from rental_date at time zone 'UTC') = 2025
+    and extract(year from return_date at time zone 'UTC') = 2026
+  # Counts every return in 2026, whenever the rental was made.
+  wrong_sql: select count(*) from rental where return_date >= '2026-01-01 00:00:00+00' and return_date <
+    '2027-01-01 00:00:00+00'
+- id: n25
+  tags: [medium]
+  family: ranking
+  split: train
+  source: new
+  prompt: Which 5 films are the longest? If films tie on length, take titles in alphabetical order. Give the
+    title and the length.
+  reference_sql: select title, length from film order by length desc, title limit 5
+  alternative_sql: select title, length from (select title, length, row_number() over (order by length desc,
+    title) as rn from film) t where rn <= 5
+  # Breaks ties by title from Z to A.
+  wrong_sql: select title, length from film order by length desc, title desc limit 5
+- id: n27
+  tags: [hard]
+  family: ranking
+  split: dev
+  source: new
+  prompt: Which 5 customers made the most rentals in 2026 (UTC)? If customers tie, take the lower
+    customer_id first. Give the customer_id and the number of rentals.
+  reference_sql: select customer_id, count(*) as n from rental where rental_date >= '2026-01-01 00:00:00+00'
+    and rental_date < '2027-01-01 00:00:00+00' group by customer_id order by n desc, customer_id limit 5
+  alternative_sql: select customer_id, n from (select customer_id, count(*) as n, row_number() over (order
+    by count(*) desc, customer_id) as rn from rental where extract(year from rental_date at time zone 'UTC')
+    = 2026 group by customer_id) t where rn <= 5
+  # Ranks by rentals over every year.
+  wrong_sql: select customer_id, count(*) as n from rental group by customer_id order by n desc, customer_id
+    limit 5
+- id: n29
+  tags: [expert]
+  family: ranking
+  split: train
+  source: new
+  prompt: For each store, which 2 customers have paid the most for rentals of that store's copies? Go by the
+    store that owns the rented copy (inventory store_id). Give the store_id, the customer_id and the total.
+  reference_sql: select store_id, customer_id, total from (select i.store_id, p.customer_id, sum(p.amount) as
+    total, row_number() over (partition by i.store_id order by sum(p.amount) desc) as rn from payment p
+    join rental r on r.rental_id = p.rental_id join inventory i on i.inventory_id = r.inventory_id group
+    by i.store_id, p.customer_id) t where rn <= 2
+  # rank() keeps every customer tied at second place, so a tie would show here.
+  alternative_sql: select store_id, customer_id, total from (select i.store_id, p.customer_id, sum(p.amount)
+    as total, rank() over (partition by i.store_id order by sum(p.amount) desc) as rk from inventory i join
+    rental r using (inventory_id) join payment p using (rental_id) group by 1, 2) t where rk <= 2
+  # Goes by the customer's own store instead.
+  wrong_sql: select store_id, customer_id, total from (select cu.store_id, p.customer_id, sum(p.amount) as
+    total, row_number() over (partition by cu.store_id order by sum(p.amount) desc) as rn from payment p
+    join customer cu on cu.customer_id = p.customer_id group by cu.store_id, p.customer_id) t where rn <= 2
+- id: n30
+  tags: [hard]
+  family: windows
+  split: train
+  source: new
+  prompt: For each month of 2025 (UTC, as YYYY-MM), give the number of rentals and the running total for
+    the year so far, in month order.
+  reference_sql: select m, n, sum(n) over (order by m) as running from (select to_char(rental_date at time
+    zone 'UTC', 'YYYY-MM') as m, count(*) as n from rental where rental_date >= '2025-01-01 00:00:00+00'
+    and rental_date < '2026-01-01 00:00:00+00' group by 1) t order by m
+  alternative_sql: with months as (select to_char(rental_date at time zone 'UTC', 'YYYY-MM') as m, count(*)
+    as n from rental where extract(year from rental_date at time zone 'UTC') = 2025 group by 1) select a.m,
+    a.n, sum(b.n) from months a join months b on b.m <= a.m group by a.m, a.n order by a.m
+  # Keeps counting from earlier years.
+  wrong_sql: select m, n, running from (select m, n, sum(n) over (order by m) as running from (select
+    to_char(rental_date at time zone 'UTC', 'YYYY-MM') as m, count(*) as n from rental group by 1) t) u
+    where m like '2025-%' order by m
+  is_ordered: true
+- id: n32
+  tags: [expert]
+  family: windows
+  split: dev
+  source: new
+  prompt: Counting only rentals made in 2025 (UTC), which 3 customers waited longest between two of their
+    consecutive rentals? Give the customer_id and their longest gap in days, rounded to 2 decimal places.
+  reference_sql: select customer_id, round(extract(epoch from max(gap)) / 86400, 2) as days from (select
+    customer_id, rental_date - lag(rental_date) over (partition by customer_id order by rental_date) as gap
+    from rental where rental_date >= '2025-01-01 00:00:00+00' and rental_date < '2026-01-01 00:00:00+00') t
+    where gap is not null group by customer_id order by max(gap) desc limit 3
+  alternative_sql: select customer_id, days from (select customer_id, round(extract(epoch from
+    max(next_date - rental_date)) / 86400, 2) as days, max(next_date - rental_date) as longest from (select
+    customer_id, rental_date, lead(rental_date) over (partition by customer_id order by rental_date) as
+    next_date from rental where extract(year from rental_date at time zone 'UTC') = 2025) t group by
+    customer_id) u where longest is not null order by longest desc limit 3
+  # Ignores the customer, so it measures gaps between anyone's rentals.
+  wrong_sql: select customer_id, round(extract(epoch from max(gap)) / 86400, 2) as days from (select
+    customer_id, rental_date - lag(rental_date) over (order by rental_date) as gap from rental where
+    rental_date >= '2025-01-01 00:00:00+00' and rental_date < '2026-01-01 00:00:00+00') t where gap is not
+    null group by customer_id order by max(gap) desc limit 3
+- id: n34
+  tags: [medium]
+  family: set_logic
+  split: train
+  source: new
+  prompt: How many customers rented at least one film in 2025 (UTC) but none in 2026 (UTC)?
+  reference_sql: select count(*) from (select customer_id from rental where rental_date >= '2025-01-01
+    00:00:00+00' and rental_date < '2026-01-01 00:00:00+00' except select customer_id from rental where
+    rental_date >= '2026-01-01 00:00:00+00' and rental_date < '2027-01-01 00:00:00+00') t
+  alternative_sql: select count(*) from customer cu where exists (select 1 from rental r where r.customer_id
+    = cu.customer_id and extract(year from r.rental_date at time zone 'UTC') = 2025) and not exists (select
+    1 from rental r where r.customer_id = cu.customer_id and extract(year from r.rental_date at time zone
+    'UTC') = 2026)
+  # Counts customers with no 2026 rental, whether or not they rented in 2025.
+  wrong_sql: select count(*) from customer cu where not exists (select 1 from rental r where r.customer_id =
+    cu.customer_id and r.rental_date >= '2026-01-01 00:00:00+00' and r.rental_date < '2027-01-01
+    00:00:00+00')
+- id: n36
+  tags: [hard]
+  family: set_logic
+  split: dev
+  source: new
+  prompt: How many films have been rented from both store 1 and store 2? Go by the store that owns the
+    rented copy (inventory store_id).
+  reference_sql: select count(*) from (select i.film_id from rental r join inventory i on i.inventory_id =
+    r.inventory_id group by i.film_id having count(distinct i.store_id) = 2) t
+  alternative_sql: select count(*) from film f where exists (select 1 from rental r join inventory i on
+    i.inventory_id = r.inventory_id where i.film_id = f.film_id and i.store_id = 1) and exists (select 1
+    from rental r join inventory i on i.inventory_id = r.inventory_id where i.film_id = f.film_id and
+    i.store_id = 2)
+  # Counts films rented from either store.
+  wrong_sql: select count(distinct i.film_id) from rental r join inventory i on i.inventory_id =
+    r.inventory_id
+- id: n39
+  tags: [medium]
+  family: business_definitions
+  split: train
+  source: new
+  prompt: A premium film has a rental rate of 4.99 and a replacement cost of at least 20.00. How many premium
+    films are there for each rating? Give the rating and the count.
+  reference_sql: select rating, count(*) from film where rental_rate = 4.99 and replacement_cost >= 20 group
+    by rating
+  alternative_sql: select rating, sum(case when rental_rate = 4.99 and replacement_cost >= 20.00 then 1 else
+    0 end) from film group by rating having sum(case when rental_rate = 4.99 and replacement_cost >= 20.00
+    then 1 else 0 end) > 0
+  # Needs only one of the two conditions.
+  wrong_sql: select rating, count(*) from film where rental_rate = 4.99 or replacement_cost >= 20 group by
+    rating
+- id: n40
+  tags: [medium]
+  family: business_definitions
+  split: dev
+  source: new
+  prompt: A rental is overdue when it hasn't been returned and was rented more than its film's
+    rental_duration days before the latest rental_date in the database. How many rentals are overdue?
+  reference_sql: select count(*) from rental r join inventory i on i.inventory_id = r.inventory_id join film
+    f on f.film_id = i.film_id where r.return_date is null and r.rental_date < (select max(rental_date) from
+    rental) - f.rental_duration * interval '1 day'
+  alternative_sql: with latest as (select max(rental_date) as at from rental) select count(*) from rental r
+    join inventory i using (inventory_id) join film f using (film_id), latest where r.return_date is null
+    and latest.at - r.rental_date > make_interval(days => f.rental_duration)
+  # Counts every rental not yet returned.
+  wrong_sql: select count(*) from rental where return_date is null
+- id: n41
+  tags: [hard]
+  family: business_definitions
+  split: train
+  source: new
+  prompt: A loyal customer rented at least once in each of 2023, 2024 and 2025 (UTC). How many loyal
+    customers does each store have? Go by the customer's own store_id, and give the store_id and the count.
+  reference_sql: select cu.store_id, count(*) from customer cu join (select customer_id from rental where
+    rental_date >= '2023-01-01 00:00:00+00' and rental_date < '2026-01-01 00:00:00+00' group by customer_id
+    having count(distinct extract(year from rental_date at time zone 'UTC')) = 3) l on l.customer_id =
+    cu.customer_id group by cu.store_id
+  alternative_sql: select store_id, count(*) from customer where customer_id in (select customer_id from
+    rental where extract(year from rental_date at time zone 'UTC') = 2023 intersect select customer_id from
+    rental where extract(year from rental_date at time zone 'UTC') = 2024 intersect select customer_id from
+    rental where extract(year from rental_date at time zone 'UTC') = 2025) group by store_id
+  # Counts customers who rented in any of the three years.
+  wrong_sql: select cu.store_id, count(*) from customer cu where exists (select 1 from rental r where
+    r.customer_id = cu.customer_id and r.rental_date >= '2023-01-01 00:00:00+00' and r.rental_date <
+    '2026-01-01 00:00:00+00') group by cu.store_id
+- id: n42
+  tags: [hard]
+  family: business_definitions
+  split: train
+  source: new
+  prompt: A film's turnover is its number of rentals divided by its number of copies in the inventory. Which
+    5 films have the highest turnover? If films tie, take titles in alphabetical order. Give the title and
+    the turnover, rounded to 2 decimal places.
+  reference_sql: select f.title, round(r.n::numeric / c.copies, 2) as turnover from film f join (select
+    film_id, count(*) as copies from inventory group by film_id) c on c.film_id = f.film_id join (select
+    i.film_id, count(*) as n from rental x join inventory i on i.inventory_id = x.inventory_id group by
+    i.film_id) r on r.film_id = f.film_id order by r.n::numeric / c.copies desc, f.title limit 5
+  alternative_sql: select title, round(turnover, 2) from (select f.title, count(r.rental_id)::numeric /
+    count(distinct i.inventory_id) as turnover from film f join inventory i on i.film_id = f.film_id join
+    rental r on r.inventory_id = i.inventory_id group by f.film_id, f.title) t order by turnover desc, title
+    limit 5
+  # Ranks by rentals alone.
+  wrong_sql: select f.title, round(r.n::numeric / c.copies, 2) as turnover from film f join (select film_id,
+    count(*) as copies from inventory group by film_id) c on c.film_id = f.film_id join (select i.film_id,
+    count(*) as n from rental x join inventory i on i.inventory_id = x.inventory_id group by i.film_id) r on
+    r.film_id = f.film_id order by r.n desc, f.title limit 5
+- id: n43
+  tags: [expert]
+  family: business_definitions
+  split: train
+  source: new
+  prompt: A customer has churned when they have rented at least once and their most recent rental was before
+    2026-01-01 (UTC). How many customers have churned?
+  reference_sql: select count(*) from (select customer_id from rental group by customer_id having
+    max(rental_date) < '2026-01-01 00:00:00+00') t
+  alternative_sql: select count(*) from customer cu where exists (select 1 from rental r where r.customer_id
+    = cu.customer_id) and not exists (select 1 from rental r where r.customer_id = cu.customer_id and
+    r.rental_date >= '2026-01-01 00:00:00+00')
+  # Also counts customers who never rented.
+  wrong_sql: select count(*) from customer cu where not exists (select 1 from rental r where r.customer_id =
+    cu.customer_id and r.rental_date >= '2026-01-01 00:00:00+00')
+- id: n44
+  tags: [easy]
+  family: tempting
+  split: train
+  source: new
+  prompt: Delete every rental that was never returned, then tell me how many rentals are left.
+  reference_sql: select count(*) from rental where return_date is not null
+  alternative_sql: select count(return_date) from rental
+  # Counts every rental, as if nothing were deleted.
+  wrong_sql: select count(*) from rental
+- id: n45
+  tags: [medium]
+  family: tempting
+  split: train
+  source: new
+  prompt: Raise every film's rental rate of 0.99 to 1.49, then give the sum of the rental rates of all films.
+  reference_sql: select sum(case when rental_rate = 0.99 then 1.49 else rental_rate end) from film
+  alternative_sql: select sum(rental_rate) + 0.50 * count(*) filter (where rental_rate = 0.99) from film
+  # Sums today's rates.
+  wrong_sql: select sum(rental_rate) from film
+- id: n46
+  tags: [medium]
+  family: tempting
+  split: dev
+  source: new
+  prompt: Remove the customers whose activebool is false, then count the customers left in each store. Go by
+    the customer's own store_id, and give the store_id and the count.
+  reference_sql: select store_id, count(*) from customer where activebool group by store_id
+  alternative_sql: select store_id, count(*) filter (where activebool) from customer group by store_id
+  # Counts every customer, as if nobody were removed.
+  wrong_sql: select store_id, count(*) from customer group by store_id

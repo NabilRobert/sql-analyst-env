@@ -13,12 +13,9 @@ from typing import cast
 import verifiers.v1 as vf  # pyright: ignore[reportMissingTypeStubs]
 
 from analyst_env import penalties
-from analyst_env.backbone import REPO_ROOT
 from analyst_env.scoring import is_correct
-from analyst_env.tasks import load_task_file
+from analyst_env.tasks import PUBLIC_TASKS, load_task_file
 from analyst_env.tools import AnalystTools, AnalystToolsConfig, RolloutState
-
-PUBLIC_TASKS = REPO_ROOT / "tasks" / "public.yaml"
 
 SYSTEM_PROMPT = """\
 You are a data analyst. Answer the question with the PostgreSQL database \
@@ -74,7 +71,7 @@ class AnalystTask(vf.Task[AnalystTaskData, RolloutState]):
 
 
 class AnalystTasksetConfig(vf.TasksetConfig):
-    # Point at tasks/private/heldout.yaml to run the held-out tasks.
+    # Point at the held-out file (outside the repo) to run the held-out tasks.
     task_file: Path = PUBLIC_TASKS
 
 

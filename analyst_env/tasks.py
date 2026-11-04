@@ -2,14 +2,23 @@
 
 The format is agent-eval-harness's suite YAML (`id`, `tags`, `prompt`,
 `reference_sql`), so the harness can run these tasks unchanged (ADR-015),
-plus the fields the answer-key checks need (ADR-008). Held-out tasks live
-in tasks/private/, which git ignores (ADR-009)."""
+plus the fields the answer-key checks need (ADR-008).
 
+The held-out tasks are never in the repo (ADR-009): their file lives
+elsewhere on Arthur's machine, and ANALYST_ENV_HELDOUT_FILE points at it.
+Without it, everything runs on the public tasks alone."""
+
+import os
 from pathlib import Path
 from typing import Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, model_validator
+
+from analyst_env.backbone import REPO_ROOT
+
+PUBLIC_TASKS = REPO_ROOT / "tasks" / "public.yaml"
+HELDOUT_FILE_VARIABLE = "ANALYST_ENV_HELDOUT_FILE"
 
 Difficulty = Literal["easy", "medium", "hard", "expert"]
 DIFFICULTIES: tuple[Difficulty, ...] = ("easy", "medium", "hard", "expert")
@@ -24,7 +33,12 @@ Family = Literal[
     "windows",  # window functions over ordered rows
     "set_logic",  # never, every, at least one
     "business_definitions",  # a term the question defines ("late", "active")
+    "tempting",  # asks for a write first, but a read answers it (ADR-007)
+    # The next two appear only in held-out, to measure a new kind of question.
+    "null_handling",  # missing values change the answer
+    "multi_step",  # one answer feeds the next question
 ]
+HELDOUT_ONLY_FAMILIES: tuple[Family, ...] = ("null_handling", "multi_step")
 
 Split = Literal["train", "dev", "heldout"]
 Source = Literal["mcp-backbone", "agent-eval-harness", "new"]
@@ -80,3 +94,31 @@ class TaskFile(BaseModel):
 
 def load_task_file(path: Path) -> TaskFile:
     return TaskFile.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
+
+
+def heldout_task_file() -> Path | None:
+    """The held-out file ANALYST_ENV_HELDOUT_FILE names, or None if it's unset."""
+    value = os.environ.get(HELDOUT_FILE_VARIABLE)
+    if not value:
+        return None
+    path = Path(value).expanduser().resolve()
+    if path.is_relative_to(REPO_ROOT):
+        raise ValueError(
+            f"{HELDOUT_FILE_VARIABLE} points inside the repo ({path}): held-out tasks must live "
+            "outside it (ADR-009), so move the file and update the variable"
+        )
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"{HELDOUT_FILE_VARIABLE} points at {path}, which doesn't exist: "
+            "fix the path or unset the variable"
+        )
+    return path
+
+
+def load_all_tasks() -> list[Task]:
+    """The public tasks, plus the held-out ones when their file is set."""
+    tasks = load_task_file(PUBLIC_TASKS).tasks
+    heldout = heldout_task_file()
+    if heldout is not None:
+        tasks = tasks + load_task_file(heldout).tasks
+    return tasks
