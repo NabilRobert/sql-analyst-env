@@ -11,11 +11,16 @@ tools, writes SQL and submits it. Code grades the answer: it must be right
 on the database the agent saw **and** on a hidden copy with different data,
 so a query that hard-codes the answer fails.
 
-**Status: slice 2 of 7.** The local stack, the two data copies, the 40
+**Status: slice 3 of 7.** The local stack, the two data copies, the 40
 reused tasks and their answer-key checks (slice 1); the environment on
 Prime Intellect's [`verifiers`](https://github.com/PrimeIntellect-ai/verifiers)
 v1, the reward, and a cheat suite of scripted policies that must fail to
-game it (slice 2). The plan is on the `docs/planning` branch.
+game it (slice 2); 60 new tasks, the train, dev and held-out splits, and a
+check that our grader agrees with agent-eval-harness's (slice 3). The plan
+is on the `docs/planning` branch.
+
+**Please don't train on the tasks.** Each task file carries a canary GUID
+so leaked tasks can be spotted. The 30 held-out tasks aren't published.
 
 ## Run it
 
@@ -28,7 +33,7 @@ uv run pytest                 # answer keys, rewards and the cheat suite, agains
 
 The first `up` builds the image and downloads Pagila (about 1 GB of
 images on disk, 13 MB of data). `docker compose down -v` resets everything.
-The full suite takes several minutes: the cheat suite plays about 480
+The full suite takes several minutes: the cheat suite plays about 840
 rollouts through verifiers, with a scripted stand-in for the model.
 
 Every evaluation goes through `analyst_env/run_eval.py`, which switches
@@ -43,15 +48,15 @@ stack/
   make_copies.sql     the seeded changes that turn Pagila into copy A or copy B
   fingerprints.json   each copy's data fingerprint; checks refuse other data
 tasks/
-  public.yaml         the public tasks (train and dev), with answer keys
-  private/            held-out tasks; git ignores it
+  public.yaml         the 70 public tasks (train and dev), with answer keys;
+                      the 30 held-out ones are never in the repo
 analyst_env/
   environment.py      the verifiers Taskset and Task, with the rewards
   tools.py            the agent's tools: MCP-backbone's four plus submit_answer
   scoring.py          is the submitted query right on both copies?
   penalties.py        which refused queries cost reward
   run_eval.py         runs `vf-eval` locally, at $0
-  tasks.py            the task file's shape
+  tasks.py            the task file's shape, and where the held-out file is
   backbone.py         the client for the local MCP-backbone
   task_checks.py      the seven answer-key checks
   sql_variants.py     the rewrite behind the tie check
@@ -60,6 +65,7 @@ analyst_env/
   cli.py              `uv run analyst-env fingerprint`
 tests/                unit tests; tests/stack/ needs the stack running
   scripted/           scripted policies, a stand-in model server, an egress guard
+  fixtures/           the harness's recorded verdicts, for the grader agreement test
 docs/guide.md         how it works, in plain English
 ```
 

@@ -164,6 +164,55 @@ Every task must pass all of them on both copies (`task_checks.py`):
 | C6 | A second, separately written query agrees | A wrong answer key |
 | C7 | The likeliest wrong reading disagrees, and runs | An ambiguous question |
 
+## The tasks
+
+100 business questions (ADR-007), each with an answer key, a second key
+written differently (for C6) and the likeliest wrong reading (for C7).
+
+| Split | Tasks | Where | Used for |
+|---|---|---|---|
+| train | 60: the 40 reused + 20 new | `tasks/public.yaml` | training |
+| dev | 10 new | `tasks/public.yaml` | picking between training rounds |
+| held-out | 30 new | **not in the repo** | the final score, run once |
+
+- **The 40 reused** come from MCP-backbone's and the harness's published
+  suites. They're public already, so they're train only.
+- **The 60 new ones** (`n01`–`n60`) were written for this project. Each
+  question says what it means where readings could differ: the time zone,
+  ties, a film in several categories, which store a rental belongs to.
+- **Held-out is stratified by difficulty:** each difficulty's share of the
+  30 matches its share of the 60 new tasks (`tests/test_heldout_file.py`).
+- **Two families appear only in held-out,** `null_handling` and
+  `multi_step` (`tasks.py: HELDOUT_ONLY_FAMILIES`), so the results show how
+  a model does on a new kind of question, not just new wording.
+- **Five tempting tasks** ask for a write first ("delete the rentals that
+  were never returned, then count…") when a read answers them. A model that
+  tries the write is refused and loses 0.5.
+
+**The held-out file lives outside the repo.** It's in Arthur's private
+notes folder, never committed or uploaded. To use it, point
+`ANALYST_ENV_HELDOUT_FILE` at it; then the task checks and the cheat suite
+cover all 100 tasks, and `EvalRun(..., task_file=...)` runs it
+(`run_eval.py`). Without the variable, everything runs on the 70 public
+tasks, which is what CI does. `tasks.py: heldout_task_file` refuses a path
+inside the repo, so the file can't be moved in by mistake.
+
+**Canaries:** each task file carries its own GUID (`canary:`), so a leak
+of either file can be spotted in a model's output.
+
+## Agreement with the harness (G5)
+
+Our strict grader is a copy of agent-eval-harness's. `tests/test_harness_agreement.py`
+checks the copy against the original's own verdicts: every distinct result
+a model returned in the harness's committed runs, on the 40 shared tasks,
+with the expected rows and the harness's strict verdict (212 of them, 161
+passes and 51 failures). Ours must give the same verdict on every one. The
+verdicts are in `tests/fixtures/harness_verdicts.json`, extracted from the
+harness repo at the commit the grader was copied from by
+`tests/fixtures/extract_harness_verdicts.py`. The harness itself isn't
+installed: it pins a different `mcp` version from verifiers, so the two
+can't share an environment.
+
 ## Glossary
 
 - **verifiers:** Prime Intellect's library for RL environments (v1 API,
@@ -204,8 +253,15 @@ Every task must pass all of them on both copies (`task_checks.py`):
   rows in any order (`analyst_env/grading.py: rows_equal_strict`).
 - **Canary:** a GUID in every task file, so leaked tasks can be spotted in
   a model's training data.
-- **Held-out:** tasks kept private, in `tasks/private/`, so no model can be
-  trained on them.
+- **Held-out:** the 30 tasks kept private, outside the repo, so no model
+  can be trained on them. `ANALYST_ENV_HELDOUT_FILE` points at their file.
+- **Split:** which use a task is for: train, dev or held-out.
+- **Family:** the kind of skill a task tests (counting, joins, windows, …;
+  `tasks.py: Family`).
+- **Tempting task:** a question that asks for a write but needs only a
+  read, to check that the model doesn't try to change the data.
+- **G5:** the goal that our grader agrees with the harness's strict grader
+  (`tests/test_harness_agreement.py`).
 - **MCP:** Model Context Protocol, how an AI client calls a server's tools.
   MCP-backbone's tools are `list_tables`, `describe_table`, `sample_rows`
   and `run_query`.
@@ -224,9 +280,14 @@ Every task must pass all of them on both copies (`task_checks.py`):
   `analyst_env/run_eval.py`; results land in `outputs/<run_name>/`.
 - **Change the turn limit:** `MAX_TURNS` in `analyst_env/run_eval.py`.
 
-- **Add or edit a task:** `tasks/public.yaml` (or `tasks/private/` for
-  held-out). Give it an `alternative_sql` and a `wrong_sql`, then run
-  `uv run pytest tests/stack`.
+- **Add or edit a task:** `tasks/public.yaml`, or the held-out file for a
+  held-out task. Give it an `alternative_sql` and a `wrong_sql`, then run
+  `uv run pytest tests/stack` (with `ANALYST_ENV_HELDOUT_FILE` set, for a
+  held-out one). A task that fails a check is rewritten, never kept.
+- **Run the held-out tasks:** set `ANALYST_ENV_HELDOUT_FILE`, and pass
+  `task_file=` to `EvalRun`. Run them once per model, at the end.
+- **Regenerate the harness verdicts:** `uv run python
+  tests/fixtures/extract_harness_verdicts.py <harness checkout>`.
 - **Change how the copies differ:** `stack/make_copies.sql` and `COPIES` in
   `stack/setup_stack.py`. Then `docker compose down -v`, `docker compose up
   -d --wait`, `uv run analyst-env fingerprint --write`, and rerun the
