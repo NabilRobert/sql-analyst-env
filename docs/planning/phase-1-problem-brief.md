@@ -6,8 +6,7 @@ Postgres database through Arthur's read-only MCP-backbone server, writes
 SQL and submits an answer. Code checks the answer and scores it. It is the
 thirteenth portfolio piece.
 
-The repo and Hub name is `flight-analysts` (Arthur, 2026-11-03; see ADR-001).
-It isn't Project 10, AI Flight School, and it uses no flight data.
+The repo and Hub name is `sql-analyst-env` (Arthur, 2026-11-04; see ADR-001).
 
 ## Problem
 
@@ -92,7 +91,7 @@ What is:
 ## Decisions (settled with Arthur)
 
 All on 2026-11-03:
-1. **Name:** `flight-analysts` (first recorded as `anaylisists`).
+1. **Name:** first recorded as `anaylisists`; now `sql-analyst-env` (ADR-001).
 2. **Framework:** verifiers v1, published publicly on the Environments Hub
    from Arthur's account, MIT licence.
 3. **Local models:** Ollama with Qwen3 1.7B, Qwen3.5 4B and Llama 3.2 3B

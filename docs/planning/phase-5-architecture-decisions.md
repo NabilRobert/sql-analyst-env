@@ -44,20 +44,18 @@ already hold most of what this needs, except the RL side.
 
 ## ADR-001: Name (settled)
 
-**Decision:** `flight-analysts`, for the folder, the repo and the Hub
-listing. Arthur, 2026-11-03: "didnt i say flight analyststs", read as
-`flight-analysts`.
+**Decision:** `sql-analyst-env`, for the folder, the repo and the Hub
+listing. Arthur, 2026-11-04: "why not".
 
-**History:** earlier the same day, the name was recorded as `anaylisists`,
-from Arthur's answer to the name question and to a spelling check that
-repeated it. The folder and the docs were renamed after slice 2.
+**History:** the name changed twice before this, both times by mistake.
+1. On 2026-11-03 it was recorded as `anaylisists`, from Arthur's answer to
+   the name question.
+2. Later that day it became `flight-analysts`, from a relayed message read
+   as asking for it. Arthur, 2026-11-04: "no flight anything the name is
+   just AI Flight School", meaning that's Project 10's name, not this one's.
+The folders and docs were renamed after slice 2, and again during slice 4.
 
-**Not Project 10.** Project 10 is AI Flight School (`ai-flight-school`), a
-flight simulator for AI agents. This project is an RL environment for a
-data-analyst agent over Pagila, a DVD-rental database; the name doesn't
-mean flight data. The README says so in its first lines.
-
-**Rejected:** `sql-analyst-env`, `rl-analyst-env`, `pagila-analyst-env`.
+**Rejected:** `rl-analyst-env`, `pagila-analyst-env`.
 
 ## ADR-002: verifiers v1, published on the Environments Hub (settled)
 
@@ -436,7 +434,7 @@ would drift apart.
 
 | # | Decision | Rejected | Status |
 |---|---|---|---|
-| 001 | Name `flight-analysts` (was `anaylisists`) | sql-analyst-env, rl-analyst-env, pagila-analyst-env | **Settled** |
+| 001 | Name `sql-analyst-env` (was `anaylisists`, then `flight-analysts`) | rl-analyst-env, pagila-analyst-env | **Settled** |
 | 002 | verifiers v1, exact pin, `--no-push` | v0, Inspect task, SkyRL format, Gymnasium, own loop | **Settled** |
 | 003 | Cite `sql-agent-gym`; claim the combination, not the idea | Claiming anti-hacking as new | Open |
 | 004 | Local pinned MCP-backbone over HTTP, via the harness's repro compose | Live server, in-process, SQLite, paid sandbox | Open |
