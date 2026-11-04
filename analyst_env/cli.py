@@ -4,7 +4,11 @@ import asyncio
 
 import typer
 
+from analyst_env.baselines import find_model, run_baseline
 from analyst_env.fingerprint import live_fingerprints, load_stored_fingerprints, write_fingerprints
+from analyst_env.results import write_results
+from analyst_env.run_record import write_record
+from analyst_env.tasks import Split
 
 app = typer.Typer(no_args_is_help=True)
 
@@ -32,3 +36,18 @@ def fingerprint_command(
         typer.echo(f"{name}: {digest[:12]} {status}")
     if live != stored:
         raise typer.Exit(code=1)
+
+
+@app.command("baseline")
+def baseline_command(model: str, split: Split) -> None:
+    """Run one baseline, five tries per task, and write its run record. MODEL is
+    an Ollama tag from analyst_env/baselines.py; SPLIT is dev, or heldout
+    (with ANALYST_ENV_HELDOUT_FILE set)."""
+    path = write_record(run_baseline(find_model(model), split))
+    typer.echo(f"record: {path}")
+
+
+@app.command("results")
+def results_command() -> None:
+    """Regenerate RESULTS.md from the run records."""
+    write_results()

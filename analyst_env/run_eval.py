@@ -15,12 +15,14 @@ import asyncio
 import os
 import subprocess
 import sys
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from analyst_env.backbone import REPO_ROOT, ensure_local
 from analyst_env.environment import AnalystTaskset
 from analyst_env.fingerprint import live_fingerprints, load_stored_fingerprints, mismatch_error
+from analyst_env.tasks import Split
 
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "outputs"
 # verifiers finds the environment by its package name.
@@ -51,12 +53,18 @@ class EvalRun:
     max_concurrent: int = 4
     # None runs the public tasks; the held-out file is passed in explicitly.
     task_file: Path | None = None
+    split: Split | None = None
+    # Sent with every model request, e.g. {"temperature": 0.6}. Empty sends
+    # none, and the model server picks (Ollama then ignores the model's own).
+    sampling: Mapping[str, float] = field(default_factory=dict[str, float])
 
 
 def eval_command(run: EvalRun) -> list[str]:
     ensure_local(run.base_url)
     vf_eval = str(Path(sys.executable).parent / "vf-eval")
-    command = [vf_eval, TASKSET_ID, *LOCAL_ONLY_FLAGS]
+    # The config file must follow the taskset id, and the flags after it
+    # override it, so the local-only flags always win.
+    command = [vf_eval, TASKSET_ID, *_sampling_file(run), *LOCAL_ONLY_FLAGS]
     command += ["--model", run.model, "--client.base-url", run.base_url]
     command += ["--client.api-key-var", MODEL_KEY_VARIABLE]
     command += ["--env.agent.max-turns", str(MAX_TURNS)]
@@ -68,7 +76,22 @@ def eval_command(run: EvalRun) -> list[str]:
         command += ["--select.limit", str(run.num_tasks)]
     if run.task_file is not None:
         command += ["--env.taskset.task-file", str(run.task_file)]
+    if run.split is not None:
+        command += ["--env.taskset.split", run.split]
     return command
+
+
+def _sampling_file(run: EvalRun) -> list[str]:
+    """Sampling goes in a config file, not flags: vf-eval passes an untyped
+    flag like `--sampling.presence-penalty 1.5` on as the string "1.5",
+    which Ollama refuses."""
+    if not run.sampling:
+        return []
+    lines = ["[sampling]", *(f"{name} = {value!r}" for name, value in run.sampling.items())]
+    path = run.output_dir / f"{run.run_name}.sampling.toml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return ["@", str(path)]
 
 
 def eval_environment() -> dict[str, str]:

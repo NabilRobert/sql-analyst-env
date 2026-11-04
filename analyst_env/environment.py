@@ -14,7 +14,7 @@ import verifiers.v1 as vf  # pyright: ignore[reportMissingTypeStubs]
 
 from analyst_env import penalties
 from analyst_env.scoring import is_correct
-from analyst_env.tasks import PUBLIC_TASKS, load_task_file
+from analyst_env.tasks import PUBLIC_TASKS, Split, load_task_file
 from analyst_env.tools import AnalystTools, AnalystToolsConfig, RolloutState
 
 SYSTEM_PROMPT = """\
@@ -69,10 +69,17 @@ class AnalystTask(vf.Task[AnalystTaskData, RolloutState]):
     async def queries_run(self, trace: vf.Trace[AnalystTaskData, RolloutState]) -> float:
         return float(len(trace.state.queries))
 
+    # Small models often write the answer as text instead of submitting it.
+    @vf.metric
+    async def has_submitted(self, trace: vf.Trace[AnalystTaskData, RolloutState]) -> float:
+        return 1.0 if trace.state.submitted_sql is not None else 0.0
+
 
 class AnalystTasksetConfig(vf.TasksetConfig):
     # Point at the held-out file (outside the repo) to run the held-out tasks.
     task_file: Path = PUBLIC_TASKS
+    # None runs every task in the file; baselines run one split at a time.
+    split: Split | None = None
 
 
 # verifiers' generics take State itself, not a subclass of it (they're
@@ -80,6 +87,8 @@ class AnalystTasksetConfig(vf.TasksetConfig):
 class AnalystTaskset(vf.Taskset[AnalystTask, AnalystTasksetConfig]):  # pyright: ignore[reportInvalidTypeArguments]
     def load(self):  # noqa: ANN201 - verifiers types the return as Iterable[TaskT]
         for task in load_task_file(self.config.task_file).tasks:
+            if self.config.split is not None and task.split != self.config.split:
+                continue
             data = AnalystTaskData(  # pyright: ignore[reportCallIssue] - pydantic fills defaults
                 id=task.id,
                 name=task.id,
