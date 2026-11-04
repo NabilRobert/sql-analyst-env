@@ -32,6 +32,11 @@ CONTEXT_LENGTH = 16384
 # Matches OLLAMA_NUM_PARALLEL. One at a time: the Mac is shared, and heavy jobs
 # run one at a time (Arthur, 2026-11-04).
 PARALLEL_ROLLOUTS = 1
+# Without a cap, Ollama shifts the context and lets a looping reply run on
+# (one dev rollout wrote 163,840 tokens over 2.5 hours). 4,096 is about twice
+# the longest normal reply seen, and keeps the longest prompt seen (9,253)
+# plus a full reply under 90% of the context.
+MAX_REPLY_TOKENS = 4096
 OLLAMA_START = f"OLLAMA_CONTEXT_LENGTH={CONTEXT_LENGTH} OLLAMA_NUM_PARALLEL={PARALLEL_ROLLOUTS}"
 
 
@@ -73,6 +78,7 @@ def run_baseline(model: BaselineModel, split: Split) -> RunRecord:
     commit = _clean_commit()
     task_file = _task_file(split)
     model_info = ollama_model_info(model.name)
+    sampling = {**model.sampling, "max_tokens": MAX_REPLY_TOKENS}
     run = EvalRun(
         model=model.name,
         base_url=f"{OLLAMA_URL}/v1",
@@ -82,7 +88,7 @@ def run_baseline(model: BaselineModel, split: Split) -> RunRecord:
         max_concurrent=PARALLEL_ROLLOUTS,
         task_file=task_file,
         split=split,
-        sampling=model.sampling,
+        sampling=sampling,
     )
     started_at = datetime.now(UTC).isoformat(timespec="seconds")
     started = time.monotonic()
@@ -93,7 +99,7 @@ def run_baseline(model: BaselineModel, split: Split) -> RunRecord:
         started_at=started_at,
         wall_seconds=round(time.monotonic() - started, 1),
         model=model_info,
-        sampling=Sampling(sent=model.sampling, source=model.settings_source),
+        sampling=Sampling(sent=sampling, source=model.settings_source),
         environment=Environment(
             commit=commit,
             verifiers_version=version("verifiers"),

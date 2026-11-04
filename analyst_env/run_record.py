@@ -155,4 +155,7 @@ def _score(rewards: dict[str, Any], name: str) -> float:
 
 def _call_tokens(call: dict[str, Any]) -> int:
     usage: dict[str, Any] = call.get("usage") or {}
-    return int(usage.get("prompt_tokens", 0)) + int(usage.get("completion_tokens", 0))
+    # verifiers counts the cached part of the prompt separately, so the
+    # prompt's full length is prompt_tokens plus cached_input_tokens.
+    prompt_tokens = int(usage.get("prompt_tokens", 0)) + int(usage.get("cached_input_tokens", 0))
+    return prompt_tokens + int(usage.get("completion_tokens", 0))

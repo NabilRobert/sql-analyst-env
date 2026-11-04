@@ -78,3 +78,15 @@ def test_the_longest_call_and_a_cut_off_reply_are_recorded(tmp_path: Path) -> No
     [rollout] = read_rollouts(_write_traces(tmp_path, [("e01", [trace])]))
     assert rollout.max_call_tokens == 250
     assert rollout.has_cut_off_reply
+
+
+def test_cached_prompt_tokens_count_towards_the_longest_call(tmp_path: Path) -> None:
+    trace = _trace()
+    trace["calls"] = [
+        {
+            "finish_reason": "stop",
+            "usage": {"prompt_tokens": 5, "cached_input_tokens": 900, "completion_tokens": 50},
+        }
+    ]
+    [rollout] = read_rollouts(_write_traces(tmp_path, [("e01", [trace])]))
+    assert rollout.max_call_tokens == 955

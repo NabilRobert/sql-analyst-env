@@ -246,13 +246,17 @@ flowchart LR
    sent explicitly: left unset, Ollama 0.40's OpenAI endpoint samples at
    temperature 1.0 and top_p 1.0, not the model's packaged defaults (its
    log showed this for Qwen3's 0.6 and 0.95). Settings the endpoint can't
-   carry, like `top_k`, come from the package and are recorded.
+   carry, like `top_k`, come from the package and are recorded. Every
+   reply is also capped at `MAX_REPLY_TOKENS` (4,096): without a cap,
+   Ollama shifts the context and lets a looping reply run on, as one Qwen3
+   reply did for 163,840 tokens.
 4. **The traces stay out of the repo:** `outputs/` for dev, and an
    `outputs/` folder beside the held-out file for held-out, since a trace
    holds every prompt.
 5. `run_record.py: read_rollouts` keeps only numbers for each try: right
    or not, the penalties, submitted or not, time, and the longest model
-   call (to check nothing outgrew the context). It writes them to
+   call, cached prompt tokens included (to check nothing outgrew the
+   context). It writes them to
    `runs/<split>/<model>.json` with no prompt, SQL or result, so a
    held-out record can be committed.
 6. **`uv run analyst-env results`** regenerates `RESULTS.md` from every
@@ -353,8 +357,8 @@ becomes a cheat policy in the suite before anything else changes
   together.
 - **Add a baseline model, or change its settings:** `BASELINE_MODELS` in
   `analyst_env/baselines.py`. Report its download size before pulling it.
-- **Change the tries per task or the context window:** `TRIES_PER_TASK`
-  and `CONTEXT_LENGTH` in `analyst_env/baselines.py` (and restart Ollama
+- **Change the tries per task, the context window or the reply cap:**
+  `TRIES_PER_TASK`, `CONTEXT_LENGTH` and `MAX_REPLY_TOKENS` in `analyst_env/baselines.py` (and restart Ollama
   to match).
 - **Change the turn limit:** `MAX_TURNS` in `analyst_env/run_eval.py`.
 
