@@ -76,10 +76,14 @@ def _literal(value: Any) -> str:
 
 
 def first_table(sql: str) -> str:
-    table = sqlglot.parse_one(sql, read="postgres").find(exp.Table)
-    if table is None:
-        raise ValueError(f"no table in {sql!r}")
-    return table.name
+    """The first real table `sql` reads: not a CTE's name, and not a table
+    function like generate_series, which has no name."""
+    query = sqlglot.parse_one(sql, read="postgres")
+    cte_names = {cte.alias for cte in query.find_all(exp.CTE)}
+    for table in query.find_all(exp.Table):
+        if table.name and table.name not in cte_names:
+            return table.name
+    raise ValueError(f"no table in {sql!r}")
 
 
 def honest(task: Task, known: KnownAnswers) -> Turns:
