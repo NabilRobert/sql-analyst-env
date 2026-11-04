@@ -13,9 +13,9 @@ from analyst_env.run_eval import EvalRun, eval_command, eval_environment
 LOCAL_MODEL_URL = "http://127.0.0.1:11434/v1"
 
 
-def _resolved_config(tmp_path: Path) -> dict[str, object]:
+def _resolved_config(tmp_path: Path, task_file: Path | None = None) -> dict[str, object]:
     """The run's config as verifiers resolves it (`--dry-run` writes it, runs nothing)."""
-    run = EvalRun("qwen3:1.7b", LOCAL_MODEL_URL, "dry", tmp_path)
+    run = EvalRun("qwen3:1.7b", LOCAL_MODEL_URL, "dry", tmp_path, task_file=task_file)
     command = [*eval_command(run), "--dry-run"]
     subprocess.run(command, env=eval_environment(), check=True, capture_output=True)
     return json.loads((tmp_path / "dry" / "configs" / "resolved" / "eval.json").read_text())
@@ -29,6 +29,12 @@ def test_verifiers_reads_our_command_as_a_local_agent(tmp_path: Path) -> None:
     agent = _resolved_config(tmp_path)["env"]["agent"]  # pyright: ignore[reportIndexIssue, reportUnknownVariableType]
     assert agent["runtime"] == {"type": "subprocess"}
     assert agent["harness"]["id"] == "null"
+
+
+def test_verifiers_reads_our_task_file(tmp_path: Path) -> None:
+    task_file = tmp_path / "heldout.yaml"
+    taskset = _resolved_config(tmp_path, task_file)["env"]["taskset"]  # pyright: ignore[reportIndexIssue, reportUnknownVariableType]
+    assert taskset["task_file"] == str(task_file)
 
 
 def test_verifiers_reads_our_command_as_a_local_model(tmp_path: Path) -> None:

@@ -49,6 +49,8 @@ class EvalRun:
     num_tasks: int | None = None
     rollouts_per_task: int = 1
     max_concurrent: int = 4
+    # None runs the public tasks; the held-out file is passed in explicitly.
+    task_file: Path | None = None
 
 
 def eval_command(run: EvalRun) -> list[str]:
@@ -64,6 +66,8 @@ def eval_command(run: EvalRun) -> list[str]:
     command += ["--no-rich"]
     if run.num_tasks is not None:
         command += ["--select.limit", str(run.num_tasks)]
+    if run.task_file is not None:
+        command += ["--env.taskset.task-file", str(run.task_file)]
     return command
 
 

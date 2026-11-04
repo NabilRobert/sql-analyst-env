@@ -1,5 +1,5 @@
-"""Every public task passes all seven answer-key checks, and each check
-catches the fault it exists for."""
+"""Every task passes all seven answer-key checks, and each check catches
+the fault it exists for."""
 
 import asyncio
 
@@ -8,18 +8,16 @@ import pytest
 from analyst_env.backbone import mcp_url, open_copies
 from analyst_env.task_checks import CheckFailure, check_task
 from analyst_env.tasks import Task
-from tests.stack.conftest import public_tasks
+from tests.stack.conftest import all_tasks
 
 pytestmark = pytest.mark.stack
 
-TASKS = public_tasks()
+TASKS = all_tasks()
 
 
 @pytest.mark.parametrize("task", TASKS, ids=[task.id for task in TASKS])
-def test_public_task_passes_every_check(
-    task: Task, public_task_failures: dict[str, list[CheckFailure]]
-) -> None:
-    failures = public_task_failures[task.id]
+def test_task_passes_every_check(task: Task, task_failures: dict[str, list[CheckFailure]]) -> None:
+    failures = task_failures[task.id]
     assert not failures, "\n".join(str(failure) for failure in failures)
 
 
