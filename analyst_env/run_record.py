@@ -65,7 +65,7 @@ class Sampling(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     # What each request carried; anything else came from packaged_parameters.
-    sent: dict[str, float]
+    sent: dict[str, int | float]
     source: str
 
 

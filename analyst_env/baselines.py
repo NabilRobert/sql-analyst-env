@@ -26,16 +26,16 @@ from analyst_env.tasks import PUBLIC_TASKS, Split, heldout_task_file
 
 OLLAMA_URL = "http://127.0.0.1:11434"
 TRIES_PER_TASK = 5
-# Long enough for a schema, a few results and Qwen's thinking; Ollama's
+# Room for a full 16-turn rollout plus a capped reply: a Qwen3 dev rollout's
+# prompt reached 14,271 tokens by turn 16, so 16,384 was too tight. Ollama's
 # default (4,096 on this Mac) would drop the start of a long rollout.
-CONTEXT_LENGTH = 16384
+CONTEXT_LENGTH = 24576
 # Matches OLLAMA_NUM_PARALLEL. One at a time: the Mac is shared, and heavy jobs
 # run one at a time (Arthur, 2026-11-04).
 PARALLEL_ROLLOUTS = 1
 # Without a cap, Ollama shifts the context and lets a looping reply run on
 # (one dev rollout wrote 163,840 tokens over 2.5 hours). 4,096 is about twice
-# the longest normal reply seen, and keeps the longest prompt seen (9,253)
-# plus a full reply under 90% of the context.
+# the longest normal reply seen.
 MAX_REPLY_TOKENS = 4096
 OLLAMA_START = f"OLLAMA_CONTEXT_LENGTH={CONTEXT_LENGTH} OLLAMA_NUM_PARALLEL={PARALLEL_ROLLOUTS}"
 

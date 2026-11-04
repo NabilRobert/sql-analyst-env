@@ -44,7 +44,7 @@ To run a baseline, with [Ollama](https://ollama.com) installed and the
 model pulled:
 
 ```bash
-OLLAMA_CONTEXT_LENGTH=16384 OLLAMA_NUM_PARALLEL=1 ollama serve
+OLLAMA_CONTEXT_LENGTH=24576 OLLAMA_NUM_PARALLEL=1 ollama serve
 uv run analyst-env baseline qwen3:1.7b dev   # writes runs/dev/qwen3-1.7b.json
 uv run analyst-env results                   # regenerates RESULTS.md
 ```

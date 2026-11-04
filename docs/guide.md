@@ -232,7 +232,7 @@ flowchart LR
 ```
 
 1. **Start Ollama** with a bigger context window and one slot:
-   `OLLAMA_CONTEXT_LENGTH=16384 OLLAMA_NUM_PARALLEL=1 ollama serve`.
+   `OLLAMA_CONTEXT_LENGTH=24576 OLLAMA_NUM_PARALLEL=1 ollama serve`.
    Ollama's default here is 4,096 tokens, and past that it silently drops
    the start of the prompt, system prompt included.
 2. **`uv run analyst-env baseline qwen3:1.7b dev`** (`cli.py:
@@ -240,7 +240,7 @@ flowchart LR
    uncommitted code, so the record names the commit that ran. It asks
    Ollama what it's serving (`ollama_model_info`): the weights' digest,
    format and quantisation, the runner, Ollama's version, and the context
-   window, which must be 16,384.
+   window, which must be 24,576.
 3. It runs `vf-eval` through `run_eval` with five tries a task, the split,
    and the model's sampling settings from `BASELINE_MODELS`. These are
    sent explicitly: left unset, Ollama 0.40's OpenAI endpoint samples at
