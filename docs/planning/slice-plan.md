@@ -7,8 +7,8 @@
 | P1 | Arthur OKs Phases 1, 2 and 5 (verifiers v1 is already approved) | Slice 1 | Arthur |
 | P2 | The GitHub repo exists | Pushing anything | Arthur |
 | P3 | ~~OK for Ollama and three models~~ approved 2026-11-03 | Spike 3, slice 4 | Arthur |
-| P4 | A Prime Intellect account, terms accepted | Slice 5 | Arthur |
-| P5 | OK for the MLX weights and `mlx-lm`, once sized (ADR-011) | Slice 7 | Arthur |
+| P4 | ~~A Prime Intellect account, terms accepted~~ not needed: no Hub listing for now (2026-11-04) | Slice 5 | Arthur |
+| P5 | ~~OK for the MLX weights and `mlx-lm`, once sized (ADR-011)~~ not needed: slice 7 cut (2026-11-04) | Slice 7 | Arthur |
 
 ## Spikes (local, $0)
 
@@ -22,6 +22,15 @@
 
 ## Slices
 
+**Scope change (Arthur, 2026-11-04):** finish by **2026-11-27**, with
+slices 1–6 done and presentable. Slice 4 by Nov 7, slice 5 by Nov 12,
+slice 6 by Nov 17, then slack and a buffer.
+- **Slice 7 is cut** and listed as future work. Qwen3 1.7B scores near
+  zero on dev (1 of 50 tries right), so rejection sampling would have
+  almost nothing to train on, and G9 is very unlikely.
+- **The Hub listing is skipped for now.** The GitHub repo is the portfolio
+  piece; G7 is reported as not done, by choice.
+
 **Evaluation-driven order, as in Juku and Project 9:** the checks come
 first and fail, then the code is written until they pass. Each new test is
 mutation-checked once. Each slice updates `docs/guide.md`.
@@ -32,9 +41,9 @@ mutation-checked once. Each slice updates `docs/guide.md`.
 | **2. Environment and reward** | Taskset, Toolset, `submit_answer`, the rewards and metrics (ADR-005); the honest policy and the cheat suite (ADR-006); fingerprints before and after | Honest policy scores 1.0 on all 40; every cheat ≤ 0 on all 40; CI runs it against the compose | $0 |
 | **3. New tasks and held-out** | 60 new tasks; splits; canary; held-out file kept outside the repo; Arthur's sample review; the agreement test with the harness (G5) | All 100 pass C1–C7; the suite passes on all 100; G5 passes | $0 |
 | **4. Baselines** | Three models on dev, then held-out once; run records; generated results table; top-20 rollouts read for new cheats | G4 met; every number traces to a record; any new cheat is a cheat policy | $0 (electricity) |
-| **5. Publish** | README and guide final; MIT licence; `prime env push` from Arthur's account | Installs and runs on a clean venv from the Hub; G6, G7 | $0 |
+| **5. Publish** | README and guide final; MIT licence; pushed to GitHub (the Hub listing is skipped for now) | Installs and runs on a clean venv from the repo; G6; G7 reported as not done, by choice | $0 |
 | **6. Evidence and write-up** | JOURNEY; portfolio entry (with the portfolio session) | A privacy check passes; every claim traces to a file | $0 |
-| **7. Training at $0** | Rejection-sampling LoRA on the Mac (ADR-011): baseline re-measured in the trained model's runtime; up to 3 rounds picked on dev; held-out once; setup shared with Project 14 | G9 met, or reported as not met | $0 |
+| **7. Training at $0** (cut, 2026-11-04: future work) | Rejection-sampling LoRA on the Mac (ADR-011): baseline re-measured in the trained model's runtime; up to 3 rounds picked on dev; held-out once; setup shared with Project 14 | G9 met, or reported as not met | $0 |
 
 ## Slice 1 in detail: the first slice
 
