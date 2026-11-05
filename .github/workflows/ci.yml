@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Install (exact versions from uv.lock)
+        run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pyright
+      # The answer-key checks run every task through a real MCP-backbone on
+      # both data copies, so the stack comes up first.
+      - run: docker compose up -d --wait
+      - run: uv run pytest
+      - if: failure()
+        run: docker compose logs setup mcp

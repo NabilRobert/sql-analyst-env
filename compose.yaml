@@ -1,0 +1,57 @@
+# The local stack every rollout and task check runs against (ADR-004):
+#   docker compose up -d --wait
+# Reset with `docker compose down -v`.
+#
+# MCP-backbone is built from agent-eval-harness's repro image, fetched by
+# git at a pinned commit rather than copied, with the MCP-backbone pin
+# raised to a newer commit. Our own setup (stack/setup_stack.py) then loads
+# Pagila and makes the two perturbed copies the agent and grader use.
+name: analyst-env
+
+x-backbone-image: &backbone-image
+  build:
+    context: https://github.com/NabilRobert/agent-eval-harness.git#a44cad49f5bec0fa4ca29cb46b4ce495a507cfae:repro
+    args:
+      MCP_BACKBONE_COMMIT: dd98f06b8e1e15520926349ba336afd904ce553e
+  image: analyst-env-backbone:dd98f06
+
+services:
+  db:
+    image: postgres:16.10-alpine@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297
+    # UTC, so date answers don't depend on the host (requirement D4).
+    command: ["postgres", "-c", "timezone=UTC"]
+    environment:
+      POSTGRES_PASSWORD: local-only  # a throwaway database, never exposed
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      retries: 30
+    volumes: [db:/var/lib/postgresql/data]
+
+  setup:
+    <<: *backbone-image
+    command: ["python", "/stack/setup_stack.py"]
+    environment:
+      # The Pagila commit the harness's published runs used.
+      PAGILA_COMMIT: 85bf46a569294e3afc834ec1946964bf413588ff
+    depends_on:
+      db: {condition: service_healthy}
+    volumes:
+      - out:/out
+      - ./stack:/stack:ro
+
+  mcp:
+    <<: *backbone-image
+    command: ["sh", "/repro/serve.sh"]
+    depends_on:
+      setup: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 2s
+      retries: 30
+    ports: ["127.0.0.1:8766:8000"]  # localhost only
+    volumes: [out:/out:ro]
+
+volumes:
+  db:
+  out:

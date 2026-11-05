@@ -43,3 +43,7 @@ build/
 .DS_Store
 .idea/
 .vscode/
+
+# Held-out tasks live outside the repo (ADR-009); this keeps a stray copy
+# out of a commit
+tasks/private/
