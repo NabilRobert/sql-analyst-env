@@ -150,6 +150,11 @@ def main() -> int:
 
     print(f"== loading Pagila at upstream commit {commit}")
     load_pagila(commit)
+    # Fresh tables have no planner statistics, so MCP-backbone's cost check
+    # overestimates: x04's answer key came out at 177,714 against a 40,000
+    # limit, and was refused on stock Pagila in CI. The copies are analyzed
+    # in make_copy; stock Pagila is queried by the cheat suite too.
+    psql("-c", "ANALYZE", db="pagila")
     for name, params in COPIES.items():
         print(f"== making {name}")
         make_copy(name, params)
