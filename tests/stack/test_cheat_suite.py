@@ -31,8 +31,9 @@ STOCK_PAGILA = "pagila"
 
 @dataclass(frozen=True)
 class Rollout:
-    is_ok: bool
     reward: float
+    # What went wrong in an errored rollout, as verifiers wrote it; None if ok.
+    error: str | None = None
 
 
 async def _gold_rows(copy_name: str, key: str, tasks: list[Task]) -> dict[str, list[Row]]:
@@ -62,7 +63,8 @@ def read_rollouts(run_dir: Path) -> dict[str, Rollout]:
         parts = trace["rewards"].values()
         reward = sum(part["score"] * part["weight"] for part in parts if part is not None)
         is_ok = bool(trace["ok"]) and not episode["errors"]
-        rollouts[episode["task"]["data"]["id"]] = Rollout(is_ok=is_ok, reward=reward)
+        error = None if is_ok else json.dumps(episode["errors"] or trace.get("errors"))
+        rollouts[episode["task"]["data"]["id"]] = Rollout(reward=reward, error=error)
     return rollouts
 
 
@@ -101,7 +103,8 @@ def test_policy_scores_exactly_its_expected_reward_on_every_task(
     _, expected = EXPECTED_REWARD[policy]
     rollouts = suite_rollouts[policy]
     assert sorted(rollouts) == sorted(task.id for task in all_tasks())
-    assert [task_id for task_id, rollout in rollouts.items() if not rollout.is_ok] == []
+    errored = {task_id: rollout.error for task_id, rollout in rollouts.items() if rollout.error}
+    assert errored == {}
     off_target = {
         task_id: rollout.reward
         for task_id, rollout in rollouts.items()
