@@ -20,6 +20,20 @@ jobs:
       # The answer-key checks run every task through a real MCP-backbone on
       # both data copies, so the stack comes up first.
       - run: docker compose up -d --wait
-      - run: uv run pytest
+      # The log is visible only to signed-in users, so a failure is also
+      # written as annotations, which the public API returns to anyone.
+      - name: uv run pytest
+        run: |
+          set -o pipefail
+          uv run pytest -rfE 2>&1 | tee pytest.log
+      - name: Annotate test failures
+        if: failure()
+        run: |
+          [ -f pytest.log ] || exit 0
+          grep -E '^(FAILED|ERROR) ' pytest.log | head -20 | while IFS= read -r line; do
+            echo "::error title=pytest::${line}"
+          done
+          details=$(grep -E '^E ' pytest.log | head -40 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}' || true)
+          if [ -n "$details" ]; then echo "::error title=pytest details::${details}"; fi
       - if: failure()
         run: docker compose logs setup mcp
