@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from analyst_env.run_record import read_rollouts
+from analyst_env.run_record import missing_tries, read_rollouts, run_timing
 
 
 def _trace(
@@ -90,3 +90,27 @@ def test_cached_prompt_tokens_count_towards_the_longest_call(tmp_path: Path) -> 
     ]
     [rollout] = read_rollouts(_write_traces(tmp_path, [("e01", [trace])]))
     assert rollout.max_call_tokens == 955
+
+
+def _timed_trace(start: float, end: float) -> dict[str, Any]:
+    trace = _trace()
+    trace["timing"] = {"start": start, "scoring": {"start": end - 1, "end": end}}
+    return trace
+
+
+def test_run_timing_spans_the_first_start_to_the_last_end(tmp_path: Path) -> None:
+    episodes = [("e01", [_timed_trace(100.0, 160.0)]), ("e02", [_timed_trace(150.0, 400.5)])]
+    started_at, wall_seconds = run_timing(_write_traces(tmp_path, episodes))
+    assert started_at == "1970-01-01T00:01:40+00:00"
+    assert wall_seconds == 300.5
+
+
+def test_a_task_with_too_few_tries_is_missing(tmp_path: Path) -> None:
+    rollouts = read_rollouts(_write_traces(tmp_path, [("e01", [_trace(), _trace()])]))
+    assert missing_tries(rollouts, ["e01", "e02"], tries=2) == ["e02"]
+    assert missing_tries(rollouts, ["e01"], tries=3) == ["e01"]
+
+
+def test_a_complete_run_has_no_missing_tries(tmp_path: Path) -> None:
+    rollouts = read_rollouts(_write_traces(tmp_path, [("e01", [_trace(), _trace()])]))
+    assert missing_tries(rollouts, ["e01"], tries=2) == []

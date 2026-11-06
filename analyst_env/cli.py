@@ -4,7 +4,7 @@ import asyncio
 
 import typer
 
-from analyst_env.baselines import find_model, run_baseline
+from analyst_env.baselines import find_model, record_finished_run, run_baseline
 from analyst_env.fingerprint import live_fingerprints, load_stored_fingerprints, write_fingerprints
 from analyst_env.results import write_results
 from analyst_env.run_record import write_record
@@ -44,6 +44,19 @@ def baseline_command(model: str, split: Split) -> None:
     an Ollama tag from analyst_env/baselines.py; SPLIT is dev, or heldout
     (with ANALYST_ENV_HELDOUT_FILE set)."""
     path = write_record(run_baseline(find_model(model), split))
+    typer.echo(f"record: {path}")
+
+
+@app.command("record")
+def record_command(
+    model: str,
+    split: Split,
+    commit: str = typer.Option(..., help="The commit the run started from"),
+) -> None:
+    """Write the record of a finished run whose after-run check failed
+    because the stack died: checks the data now, then builds
+    the record from the run's traces. Never reruns anything."""
+    path = write_record(record_finished_run(find_model(model), split, commit))
     typer.echo(f"record: {path}")
 
 

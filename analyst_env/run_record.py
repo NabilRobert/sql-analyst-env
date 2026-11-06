@@ -10,6 +10,8 @@ The record carries no prompt, SQL or result, so a held-out record can be
 committed without publishing a held-out task (ADR-009)."""
 
 import json
+from collections import Counter
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -122,6 +124,27 @@ def read_rollouts(traces_path: Path) -> list[Rollout]:
             has_episode_errors = bool(episode["errors"])
             rollouts.append(_rollout(task_id, attempt, trace, has_episode_errors))
     return rollouts
+
+
+def run_timing(traces_path: Path) -> tuple[str, float]:
+    """When a finished run started (UTC, ISO) and how long its rollouts took,
+    from the traces alone: for a record built after the run.
+    It leaves out the fingerprint checks either side, so it's a little
+    shorter than a live run's wall time."""
+    starts: list[float] = []
+    ends: list[float] = []
+    for line in traces_path.read_text(encoding="utf-8").splitlines():
+        for trace in json.loads(line)["traces"]:
+            starts.append(trace["timing"]["start"])
+            ends.append(trace["timing"]["scoring"]["end"])
+    started_at = datetime.fromtimestamp(min(starts), UTC).isoformat(timespec="seconds")
+    return started_at, round(max(ends) - min(starts), 1)
+
+
+def missing_tries(rollouts: list[Rollout], task_ids: list[str], tries: int) -> list[str]:
+    """Tasks with fewer than `tries` rollouts: a run that stopped early."""
+    counts = Counter(rollout.task_id for rollout in rollouts)
+    return [task_id for task_id in task_ids if counts[task_id] < tries]
 
 
 def _rollout(

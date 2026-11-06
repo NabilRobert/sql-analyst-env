@@ -263,6 +263,26 @@ flowchart LR
    record (`results.py: render`). `tests/test_results.py` fails if the
    committed file differs.
 
+**When a run counts** (rules fixed before the first run):
+- No more than 5% of tries errored.
+- No model call reached 90% of the context window (22,118 of 24,576
+  tokens). Past the window, Ollama drops the start of the prompt.
+- The copies' fingerprints matched before and after the run.
+- The record names a clean commit.
+- Held-out runs once per model, after all three dev runs count, and all
+  from one commit.
+
+A run that breaks a rule is voided, fixed and run again. That's only for
+dev, since held-out runs once.
+
+**If the stack dies after the last try,** the run's after-run fingerprint
+check fails and no record is written, but the traces are complete. Rerunning would show the model the held-out tasks
+twice, so `uv run analyst-env record <model> <split> --commit <commit the
+run started from>` (`baselines.py: record_finished_run`) does the rest. It
+refuses a run with a task short of five tries (`run_record.py:
+missing_tries`). It then checks the data once the stack is back, and
+builds the record from the traces, timing included (`run_timing`).
+
 **The numbers:**
 - **Pass@1** is each task's share of right tries, averaged over tasks.
 - **Its 95% interval** is agent-eval-harness's bootstrap for one run:
@@ -368,6 +388,8 @@ becomes a cheat policy in the suite before anything else changes
   held-out one). A task that fails a check is rewritten, never kept.
 - **Run the held-out tasks:** set `ANALYST_ENV_HELDOUT_FILE`, then `uv
   run analyst-env baseline <model> heldout`. Once per model, at the end.
+  If the stack died after the last try, use `analyst-env record` (see
+  Baselines) rather than running it again.
 - **Regenerate the harness verdicts:** `uv run python
   tests/fixtures/extract_harness_verdicts.py <harness checkout>`.
 - **Change how the copies differ:** `stack/make_copies.sql` and `COPIES` in

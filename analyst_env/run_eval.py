@@ -11,7 +11,6 @@ accepts only a model server on this machine, and takes no free-form
 flags that could turn them back on. `eval_environment` also hides any
 Prime credentials from the run, so even a missed default can't bill."""
 
-import asyncio
 import os
 import subprocess
 import sys
@@ -21,7 +20,7 @@ from pathlib import Path
 
 from analyst_env.backbone import REPO_ROOT, ensure_local
 from analyst_env.environment import AnalystTaskset
-from analyst_env.fingerprint import live_fingerprints, load_stored_fingerprints, mismatch_error
+from analyst_env.fingerprint import check_fingerprints
 from analyst_env.tasks import Split
 
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "outputs"
@@ -104,19 +103,11 @@ def eval_environment() -> dict[str, str]:
     return environment
 
 
-def _check_fingerprints(moment: str) -> None:
-    live = asyncio.run(live_fingerprints())
-    stored = load_stored_fingerprints()
-    changed = [name for name, digest in live.items() if stored.get(name) != digest]
-    if changed:
-        raise mismatch_error(changed) from RuntimeError(f"checked {moment} the run")
-
-
 def run_eval(run: EvalRun) -> Path:
     """Runs one evaluation and returns its directory (traces.jsonl inside).
     The data is fingerprinted before and after, so a run that changed it
     can't pass unnoticed (ADR-006, cheat 7)."""
-    _check_fingerprints("before")
+    check_fingerprints("before the run")
     subprocess.run(eval_command(run), env=eval_environment(), check=True)
-    _check_fingerprints("after")
+    check_fingerprints("after the run")
     return run.output_dir / run.run_name

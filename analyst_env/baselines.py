@@ -19,10 +19,19 @@ from typing import Any
 import httpx2
 
 from analyst_env.backbone import REPO_ROOT
-from analyst_env.fingerprint import load_stored_fingerprints
+from analyst_env.fingerprint import check_fingerprints, load_stored_fingerprints
 from analyst_env.run_eval import DEFAULT_OUTPUT_DIR, MAX_TURNS, EvalRun, run_eval
-from analyst_env.run_record import Environment, ModelInfo, RunRecord, Sampling, read_rollouts
-from analyst_env.tasks import PUBLIC_TASKS, Split, heldout_task_file
+from analyst_env.run_record import (
+    Environment,
+    ModelInfo,
+    Rollout,
+    RunRecord,
+    Sampling,
+    missing_tries,
+    read_rollouts,
+    run_timing,
+)
+from analyst_env.tasks import PUBLIC_TASKS, Split, heldout_task_file, load_task_file
 
 OLLAMA_URL = "http://127.0.0.1:11434"
 TRIES_PER_TASK = 5
@@ -76,10 +85,39 @@ def find_model(name: str) -> BaselineModel:
 def run_baseline(model: BaselineModel, split: Split) -> RunRecord:
     """Runs one model on one split and returns its record (not yet written)."""
     commit = _clean_commit()
-    task_file = _task_file(split)
+    run = _eval_run(model, split)
     model_info = ollama_model_info(model.name)
-    sampling = {**model.sampling, "max_tokens": MAX_REPLY_TOKENS}
-    run = EvalRun(
+    started_at = datetime.now(UTC).isoformat(timespec="seconds")
+    started = time.monotonic()
+    run_dir = run_eval(run)
+    wall_seconds = round(time.monotonic() - started, 1)
+    rollouts = read_rollouts(run_dir / "traces.jsonl")
+    return _record(run, commit, model_info, (started_at, wall_seconds), rollouts)
+
+
+def record_finished_run(model: BaselineModel, split: Split, commit: str) -> RunRecord:
+    """The record of a run whose rollouts all finished but whose after-run
+    fingerprint check couldn't run, because the stack died (docs/guide.md,
+    "When a run counts"). Rerunning would show the model the held-out tasks
+    twice, so the data is checked now and the record is built from the
+    traces. `commit` is the one the run started from: only this command's
+    code may have changed since, which `git diff <commit>` shows."""
+    _clean_commit()
+    run = _eval_run(model, split)
+    traces = run.output_dir / run.run_name / "traces.jsonl"
+    rollouts = read_rollouts(traces)
+    task_ids = [task.id for task in load_task_file(_task_file(split)).tasks if task.split == split]
+    missing = missing_tries(rollouts, task_ids, TRIES_PER_TASK)
+    if missing:
+        raise RuntimeError(f"the run stopped early ({', '.join(missing)}): rerun it instead")
+    check_fingerprints("after the run, late")
+    model_info = ollama_model_info(model.name)
+    return _record(run, commit, model_info, run_timing(traces), rollouts)
+
+
+def _eval_run(model: BaselineModel, split: Split) -> EvalRun:
+    task_file = _task_file(split)
+    return EvalRun(
         model=model.name,
         base_url=f"{OLLAMA_URL}/v1",
         run_name=f"{split}-{model.name.replace(':', '-')}",
@@ -88,26 +126,36 @@ def run_baseline(model: BaselineModel, split: Split) -> RunRecord:
         max_concurrent=PARALLEL_ROLLOUTS,
         task_file=task_file,
         split=split,
-        sampling=sampling,
+        sampling={**model.sampling, "max_tokens": MAX_REPLY_TOKENS},
     )
-    started_at = datetime.now(UTC).isoformat(timespec="seconds")
-    started = time.monotonic()
-    run_dir = run_eval(run)
+
+
+def _record(
+    run: EvalRun,
+    commit: str,
+    model_info: ModelInfo,
+    timing: tuple[str, float],
+    rollouts: list[Rollout],
+) -> RunRecord:
+    if run.split is None or run.task_file is None:
+        raise ValueError("a baseline run always names its split and task file")
+    started_at, wall_seconds = timing
+    settings_source = find_model(run.model).settings_source
     return RunRecord(
-        split=split,
+        split=run.split,
         tries_per_task=TRIES_PER_TASK,
         started_at=started_at,
-        wall_seconds=round(time.monotonic() - started, 1),
+        wall_seconds=wall_seconds,
         model=model_info,
-        sampling=Sampling(sent=sampling, source=model.settings_source),
+        sampling=Sampling(sent=dict(run.sampling), source=settings_source),
         environment=Environment(
             commit=commit,
             verifiers_version=version("verifiers"),
             max_turns=MAX_TURNS,
-            task_file_sha256=hashlib.sha256(task_file.read_bytes()).hexdigest(),
+            task_file_sha256=hashlib.sha256(run.task_file.read_bytes()).hexdigest(),
             fingerprints=load_stored_fingerprints(),
         ),
-        rollouts=read_rollouts(run_dir / "traces.jsonl"),
+        rollouts=rollouts,
     )
 
 
