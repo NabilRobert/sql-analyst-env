@@ -47,8 +47,19 @@ def _error_summary(errors: list[dict[str, str]] | None) -> str:
 
 
 async def _gold_rows(copy_name: str, key: str, tasks: list[Task]) -> dict[str, list[Row]]:
+    """Each task's answer on one copy. A refused or failed answer key
+    raises here: its empty rows would otherwise become a cheat's "answer"
+    and fail far from the cause."""
+    rows: dict[str, list[Row]] = {}
     async with connect(copy_name, mcp_url(), key) as copy:
-        return {task.id: (await copy.run_query(task.reference_sql)).rows for task in tasks}
+        for task in tasks:
+            result = await copy.run_query(task.reference_sql)
+            if not result.is_success:
+                raise RuntimeError(
+                    f"{task.id}'s answer key failed on {copy_name}: {result.status}, {result.error}"
+                )
+            rows[task.id] = result.rows
+    return rows
 
 
 def task_files() -> list[Path]:

@@ -102,14 +102,23 @@ def serve(model: ScriptedModel) -> Generator[str]:
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:  # noqa: N802 - the name http.server calls
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-            completion = model.reply(body)
+            try:
+                completion = model.reply(body)
+            except Exception as error:  # noqa: BLE001 - any policy bug is reported
+                # Unanswered, the client only sees "Server disconnected";
+                # a 500 carries the policy's actual error into the trace.
+                self._send(500, "text/plain", f"{type(error).__name__}: {error}".encode())
+                return
             if body.get("stream"):
                 payload = b"".join(_stream_events(completion))
                 content_type = "text/event-stream"
             else:
                 payload = json.dumps(completion).encode()
                 content_type = "application/json"
-            self.send_response(200)
+            self._send(200, content_type, payload)
+
+        def _send(self, status: int, content_type: str, payload: bytes) -> None:
+            self.send_response(status)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
