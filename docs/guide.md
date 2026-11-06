@@ -216,8 +216,8 @@ can't share an environment.
 ## Baselines
 
 Three small open models, run on this Mac through Ollama, show where the
-environment starts: Qwen3 1.7B (the model slice 7 trains), Qwen3.5 4B and
-Llama 3.2 3B. Each tries every task five times, on dev first and then once
+environment starts: Qwen3 1.7B (the model slice 7 would have trained;
+that slice is cut), Qwen3.5 4B and Llama 3.2 3B. Each tries every task five times, on dev first and then once
 on held-out. The numbers are in [RESULTS.md](../RESULTS.md).
 
 ```mermaid
@@ -234,7 +234,10 @@ flowchart LR
 1. **Start Ollama** with a bigger context window and one slot:
    `OLLAMA_CONTEXT_LENGTH=24576 OLLAMA_NUM_PARALLEL=1 ollama serve`.
    Ollama's default here is 4,096 tokens, and past that it silently drops
-   the start of the prompt, system prompt included.
+   the start of the prompt, system prompt included. That's Ollama's
+   llama.cpp runner, which Qwen3 and Llama use. Qwen3.5 runs on its MLX
+   runner, which ignores the setting although Ollama reports it, so a
+   Qwen3.5 prompt can grow past 24,576 tokens and is processed whole.
 2. **`uv run analyst-env baseline qwen3:1.7b dev`** (`cli.py:
    baseline_command`). `baselines.py: run_baseline` refuses to run on
    uncommitted code, so the record names the commit that ran. It asks
@@ -276,8 +279,8 @@ A run that breaks a rule is voided, fixed and run again. That's only for
 dev, since held-out runs once.
 
 **If the stack dies after the last try,** the run's after-run fingerprint
-check fails and no record is written, but the traces are complete. Rerunning would show the model the held-out tasks
-twice, so `uv run analyst-env record <model> <split> --commit <commit the
+check fails and no record is written, but the traces are complete.
+Rerunning would show the model the held-out tasks twice, so `uv run analyst-env record <model> <split> --commit <commit the
 run started from>` (`baselines.py: record_finished_run`) does the rest. It
 refuses a run with a task short of five tries (`run_record.py:
 missing_tries`). It then checks the data once the stack is back, and
@@ -289,6 +292,16 @@ builds the record from the traces, timing included (`run_timing`).
   resample the tasks, then each task's tries, 10,000 times, with a fixed
   seed (`results.py: bootstrap_interval`).
 - **pass^5** counts the tasks a model got right on all five tries.
+
+**Which server the numbers ran on.** Every baseline ran against
+MCP-backbone at `dd98f06`. The pin then moved to `90fa10d`, which accepts
+top-level UNION, INTERSECT and EXCEPT (the old pin refused them as
+unsafe) and refuses row locks (`FOR UPDATE` now counts as unsafe). No try
+used a row lock, and no submitted answer was a set operation, so no
+pass@1 or pass^5 number would change. Some unsafe counts would: tries
+whose only unsafe query was a set operation. A try that went on after a
+refusal might have gone differently, which can't be known without
+rerunning.
 
 **After each run,** the 20 highest-scoring tries per model are read by
 hand for a way of scoring that isn't answering the question. A new one
