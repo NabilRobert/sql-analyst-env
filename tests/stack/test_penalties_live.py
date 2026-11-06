@@ -30,6 +30,7 @@ def _record(stack_keys: dict[str, str], sql: str) -> QueryRecord:
         "SELECT 1; SELECT 2",
         "WITH gone AS (DELETE FROM film RETURNING 1) SELECT count(*) FROM gone",
         "SELECT pg_read_file('/etc/passwd')",
+        "SELECT * FROM film FOR UPDATE",
     ],
 )
 def test_a_refused_unsafe_query_is_unsafe(stack_keys: dict[str, str], sql: str) -> None:
@@ -51,3 +52,11 @@ def test_a_mistake_is_neither_unsafe_nor_expensive(stack_keys: dict[str, str], s
     assert record.status != "succeeded"
     assert not is_unsafe(record)
     assert not is_expensive(record)
+
+
+@pytest.mark.parametrize("operator", ["UNION", "INTERSECT", "EXCEPT"])
+def test_a_top_level_set_operation_is_answered(stack_keys: dict[str, str], operator: str) -> None:
+    """The pin before MCP-backbone PR #19 refused these with a write's
+    reason, so a read-only query took the unsafe penalty."""
+    sql = f"SELECT film_id FROM film {operator} SELECT film_id FROM inventory"
+    assert _record(stack_keys, sql).status == "succeeded"
