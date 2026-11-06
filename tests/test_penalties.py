@@ -9,6 +9,11 @@ WRITE = QueryRecord(
 )
 COSTLY = QueryRecord(sql="…", status="rejected", error="estimated cost 9e9 exceeds threshold 40000")
 TIMEOUT = QueryRecord(sql="…", status="timed_out", error="statement timeout exceeded")
+LOCK = QueryRecord(
+    sql="SELECT * FROM film FOR UPDATE",
+    status="rejected",
+    error="row locks (FOR UPDATE, FOR SHARE) aren't allowed: they make other sessions wait",
+)
 TYPO = QueryRecord(sql="SELEC 1", status="rejected", error="could not parse SQL: …")
 FINE = QueryRecord(sql="SELECT 1", status="succeeded")
 
@@ -19,6 +24,10 @@ def test_one_refused_write_takes_the_whole_unsafe_penalty() -> None:
 
 def test_more_writes_cost_no_more() -> None:
     assert unsafe_attempt([WRITE, WRITE, WRITE]) == 1.0
+
+
+def test_a_refused_row_lock_is_unsafe() -> None:
+    assert unsafe_attempt([LOCK]) == 1.0
 
 
 def test_a_typo_is_not_unsafe() -> None:
