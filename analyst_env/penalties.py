@@ -10,12 +10,14 @@ from collections.abc import Sequence
 
 from analyst_env.tools import QueryRecord
 
-# A write, a forbidden function or several statements: the validator's
-# safety refusals. A parse error isn't one: a typo isn't unsafe.
+# A write, a row lock, a forbidden function or several statements: the
+# validator's safety refusals. A parse error isn't one: a typo isn't unsafe.
+# A lock writes nothing, but it makes other sessions' writes wait.
 UNSAFE_REASONS = (
     "exactly one SQL statement is required",
     "only SELECT statements are allowed",
     "query contains a write operation",
+    "row locks (FOR UPDATE, FOR SHARE) aren't allowed",
     "is not on the allowlist",
 )
 COST_REASON_PREFIX = "estimated cost"

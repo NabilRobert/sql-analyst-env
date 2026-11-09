@@ -4,16 +4,18 @@
 #
 # MCP-backbone is built from agent-eval-harness's repro image, fetched by
 # git at a pinned commit rather than copied, with the MCP-backbone pin
-# raised to a newer commit. Our own setup (stack/setup_stack.py) then loads
-# Pagila and makes the two perturbed copies the agent and grader use.
+# raised to a newer commit: one that accepts UNION, INTERSECT and EXCEPT
+# and refuses row locks (MCP-backbone PR #19). Our own setup
+# (stack/setup_stack.py) then loads Pagila and makes the two perturbed
+# copies the agent and grader use.
 name: analyst-env
 
 x-backbone-image: &backbone-image
   build:
     context: https://github.com/NabilRobert/agent-eval-harness.git#a44cad49f5bec0fa4ca29cb46b4ce495a507cfae:repro
     args:
-      MCP_BACKBONE_COMMIT: dd98f06b8e1e15520926349ba336afd904ce553e
-  image: analyst-env-backbone:dd98f06
+      MCP_BACKBONE_COMMIT: 90fa10de6ea3565a92157590dee067f04e933b42
+  image: analyst-env-backbone:90fa10d
 
 services:
   db:

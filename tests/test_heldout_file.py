@@ -3,6 +3,7 @@
 The shape tests need the file itself, so they run only where
 ANALYST_ENV_HELDOUT_FILE points at it (Arthur's machine, not CI)."""
 
+import subprocess
 from collections import Counter
 from pathlib import Path
 
@@ -76,3 +77,31 @@ def test_heldout_canary_differs_from_the_public_one(heldout: list[Task]) -> None
     path = heldout_task_file()
     assert path is not None
     assert load_task_file(path).canary != load_task_file(PUBLIC_TASKS).canary
+
+
+def _files_git_would_commit() -> list[Path]:
+    command = [
+        "git",
+        "-C",
+        str(REPO_ROOT),
+        "ls-files",
+        "--cached",
+        "--others",
+        "--exclude-standard",
+    ]
+    names = subprocess.run(command, check=True, capture_output=True, text=True).stdout.split()
+    return [REPO_ROOT / name for name in names if (REPO_ROOT / name).is_file()]
+
+
+def test_no_heldout_text_is_in_the_repo(heldout: list[Task]) -> None:
+    """Run records and RESULTS.md come from held-out runs, so check that none
+    of them, nor any other file git would commit, quotes a held-out task."""
+    path = heldout_task_file()
+    assert path is not None
+    secrets = [load_task_file(path).canary]
+    for task in heldout:
+        secrets += [task.prompt, task.reference_sql, task.alternative_sql, task.wrong_sql]
+    for file in _files_git_would_commit():
+        text = file.read_text(encoding="utf-8", errors="ignore")
+        leaked = [secret[:40] for secret in secrets if secret.strip() in text]
+        assert not leaked, f"{file.relative_to(REPO_ROOT)} quotes held-out text: {leaked}"

@@ -46,6 +46,11 @@ flowchart TD
    MCP-backbone's script.
 4. `seed_workspaces` makes one MCP-backbone workspace per copy, with raised
    limits, and writes the keys to the stack's own volume (never the host).
+5. `make_first_use_rows` makes each workspace's rate-limit counters and
+   schema cache, one workspace at a time. It's a workaround: MCP-backbone
+   makes them on first use, and two concurrent first uses break that
+   workspace for good (fixed upstream; see "Upstream" in
+   [the rollout review](rollout-review.md#upstream)).
 
 **3. The checks run** (`uv run pytest`).
 1. `tests/stack/conftest.py: stack_keys` reads the keys with
@@ -213,6 +218,101 @@ harness repo at the commit the grader was copied from by
 installed: it pins a different `mcp` version from verifiers, so the two
 can't share an environment.
 
+## Baselines
+
+Three small open models, run on this Mac through Ollama, show where the
+environment starts: Qwen3 1.7B (the model slice 7 would have trained;
+that slice is cut), Qwen3.5 4B and Llama 3.2 3B. Each tries every task five times, on dev first and then once
+on held-out. The numbers are in [RESULTS.md](../RESULTS.md).
+
+```mermaid
+flowchart LR
+    C["analyst-env baseline<br/>cli.py"] --> B["run_baseline<br/>baselines.py"]
+    B -->|asks what's loaded| O[Ollama]
+    B --> R["run_eval<br/>run_eval.py"]
+    R -->|vf-eval, 5 tries a task| T[traces.jsonl<br/>outside the repo]
+    T --> RR["read_rollouts<br/>run_record.py"]
+    RR --> J["runs/split/model.json"]
+    J --> M["write_results<br/>results.py"] --> F[RESULTS.md]
+```
+
+1. **Start Ollama** with a bigger context window and one slot:
+   `OLLAMA_CONTEXT_LENGTH=24576 OLLAMA_NUM_PARALLEL=1 ollama serve`.
+   Ollama's default here is 4,096 tokens, and past that it silently drops
+   the start of the prompt, system prompt included. That's Ollama's
+   llama.cpp runner, which Qwen3 and Llama use. Qwen3.5 runs on its MLX
+   runner, which ignores the setting although Ollama reports it, so a
+   Qwen3.5 prompt can grow past 24,576 tokens and is processed whole.
+2. **`uv run analyst-env baseline qwen3:1.7b dev`** (`cli.py:
+   baseline_command`). `baselines.py: run_baseline` refuses to run on
+   uncommitted code, so the record names the commit that ran. It asks
+   Ollama what it's serving (`ollama_model_info`): the weights' digest,
+   format and quantisation, the runner, Ollama's version, and the context
+   window, which must be 24,576.
+3. It runs `vf-eval` through `run_eval` with five tries a task, the split,
+   and the model's sampling settings from `BASELINE_MODELS`. These are
+   sent explicitly: left unset, Ollama 0.40's OpenAI endpoint samples at
+   temperature 1.0 and top_p 1.0, not the model's packaged defaults (its
+   log showed this for Qwen3's 0.6 and 0.95). Settings the endpoint can't
+   carry, like `top_k`, come from the package and are recorded. Every
+   reply is also capped at `MAX_REPLY_TOKENS` (4,096): without a cap,
+   Ollama shifts the context and lets a looping reply run on, as one Qwen3
+   reply did for 163,840 tokens.
+4. **The traces stay out of the repo:** `outputs/` for dev, and an
+   `outputs/` folder beside the held-out file for held-out, since a trace
+   holds every prompt.
+5. `run_record.py: read_rollouts` keeps only numbers for each try: right
+   or not, the penalties, submitted or not, time, and the longest model
+   call, cached prompt tokens included (to check nothing outgrew the
+   context). It writes them to
+   `runs/<split>/<model>.json` with no prompt, SQL or result, so a
+   held-out record can be committed.
+6. **`uv run analyst-env results`** regenerates `RESULTS.md` from every
+   record (`results.py: render`). `tests/test_results.py` fails if the
+   committed file differs.
+
+**When a run counts** (rules fixed before the first run):
+- No more than 5% of tries errored.
+- No model call reached 90% of the context window (22,118 of 24,576
+  tokens). Past the window, Ollama drops the start of the prompt.
+- The copies' fingerprints matched before and after the run.
+- The record names a clean commit.
+- Held-out runs once per model, after all three dev runs count, and all
+  from one commit.
+
+A run that breaks a rule is voided, fixed and run again. That's only for
+dev, since held-out runs once.
+
+**If the stack dies after the last try,** the run's after-run fingerprint
+check fails and no record is written, but the traces are complete.
+Rerunning would show the model the held-out tasks twice, so `uv run analyst-env record <model> <split> --commit <commit the
+run started from>` (`baselines.py: record_finished_run`) does the rest. It
+refuses a run with a task short of five tries (`run_record.py:
+missing_tries`). It then checks the data once the stack is back, and
+builds the record from the traces, timing included (`run_timing`).
+
+**The numbers:**
+- **Pass@1** is each task's share of right tries, averaged over tasks.
+- **Its 95% interval** is agent-eval-harness's bootstrap for one run:
+  resample the tasks, then each task's tries, 10,000 times, with a fixed
+  seed (`results.py: bootstrap_interval`).
+- **pass^5** counts the tasks a model got right on all five tries.
+
+**Which server the numbers ran on.** Every baseline ran against
+MCP-backbone at `dd98f06`. The pin then moved to `90fa10d`, which accepts
+top-level UNION, INTERSECT and EXCEPT (the old pin refused them as
+unsafe) and refuses row locks (`FOR UPDATE` now counts as unsafe). No try
+used a row lock, and no submitted answer was a set operation, so no
+pass@1 or pass^5 number would change. Some unsafe counts would: tries
+whose only unsafe query was a set operation. A try that went on after a
+refusal might have gone differently, which can't be known without
+rerunning.
+
+**After each run,** the 20 highest-scoring tries per model are read by
+hand for a way of scoring that isn't answering the question. A new one
+becomes a cheat policy in the suite before anything else changes
+(ADR-006). The reading is in [docs/rollout-review.md](rollout-review.md).
+
 ## Glossary
 
 - **verifiers:** Prime Intellect's library for RL environments (v1 API,
@@ -260,6 +360,18 @@ can't share an environment.
   `tasks.py: Family`).
 - **Tempting task:** a question that asks for a write but needs only a
   read, to check that the model doesn't try to change the data.
+- **Baseline:** a model's score before any training, measured the same
+  way the trained model will be (`analyst_env/baselines.py`).
+- **Run record:** one baseline run's numbers, per try, with the model,
+  runtime and settings that made them (`runs/`, `analyst_env/run_record.py`).
+- **Pass@1, pass^5:** the chance one try is right; the share of tasks
+  right on all five tries.
+- **Bootstrap interval:** a range for pass@1 found by re-drawing the tasks
+  and tries at random many times and seeing how much the score moves.
+- **Thinking:** Qwen's mode where it reasons in hidden text before each
+  reply. Slower, and on by default; recorded per run.
+- **Quantisation:** storing the weights in fewer bits (4-bit here) so the
+  model fits in memory; it can cost some accuracy.
 - **G5:** the goal that our grader agrees with the harness's strict grader
   (`tests/test_harness_agreement.py`).
 - **MCP:** Model Context Protocol, how an AI client calls a server's tools.
@@ -278,14 +390,24 @@ can't share an environment.
   expected score in `CHEATS`.
 - **Run a model:** `run_eval(EvalRun(model, base_url, run_name))` in
   `analyst_env/run_eval.py`; results land in `outputs/<run_name>/`.
+- **Run a baseline:** `uv run analyst-env baseline <model> dev`, then `uv
+  run analyst-env results`, and commit the record and `RESULTS.md`
+  together.
+- **Add a baseline model, or change its settings:** `BASELINE_MODELS` in
+  `analyst_env/baselines.py`. Report its download size before pulling it.
+- **Change the tries per task, the context window or the reply cap:**
+  `TRIES_PER_TASK`, `CONTEXT_LENGTH` and `MAX_REPLY_TOKENS` in `analyst_env/baselines.py` (and restart Ollama
+  to match).
 - **Change the turn limit:** `MAX_TURNS` in `analyst_env/run_eval.py`.
 
 - **Add or edit a task:** `tasks/public.yaml`, or the held-out file for a
   held-out task. Give it an `alternative_sql` and a `wrong_sql`, then run
   `uv run pytest tests/stack` (with `ANALYST_ENV_HELDOUT_FILE` set, for a
   held-out one). A task that fails a check is rewritten, never kept.
-- **Run the held-out tasks:** set `ANALYST_ENV_HELDOUT_FILE`, and pass
-  `task_file=` to `EvalRun`. Run them once per model, at the end.
+- **Run the held-out tasks:** set `ANALYST_ENV_HELDOUT_FILE`, then `uv
+  run analyst-env baseline <model> heldout`. Once per model, at the end.
+  If the stack died after the last try, use `analyst-env record` (see
+  Baselines) rather than running it again.
 - **Regenerate the harness verdicts:** `uv run python
   tests/fixtures/extract_harness_verdicts.py <harness checkout>`.
 - **Change how the copies differ:** `stack/make_copies.sql` and `COPIES` in
@@ -293,7 +415,9 @@ can't share an environment.
   -d --wait`, `uv run analyst-env fingerprint --write`, and rerun the
   checks: every task's answers change.
 - **Move a pin:** MCP-backbone and the harness image in `compose.yaml`;
-  Pagila's commit in `compose.yaml`'s `PAGILA_COMMIT`.
+  Pagila's commit in `compose.yaml`'s `PAGILA_COMMIT`. Once the
+  MCP-backbone pin includes its first-use fix (`fix/concurrent-first-use`),
+  delete `make_first_use_rows` from `stack/setup_stack.py`.
 - **Point at a different local port:** set `ANALYST_ENV_MCP_URL`. Anything
   not on this machine is refused (`backbone.py: ensure_local`).
 - **Check more tasks at once:** `PARALLEL_TASKS` in

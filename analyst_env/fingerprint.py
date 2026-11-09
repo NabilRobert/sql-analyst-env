@@ -8,6 +8,7 @@ stack/make_copies.sql also changes: added rows, actor credits and return
 dates. Like the harness's, none hashes a timestamp as text, so the result
 doesn't depend on the session's time zone."""
 
+import asyncio
 import hashlib
 import json
 from pathlib import Path
@@ -72,6 +73,15 @@ async def mismatched_copies(copies: list[BackboneCopy], stored: dict[str, str]) 
     describe (requirement D3). Returned, not raised: an error raised while
     MCP sessions are open reaches the caller wrapped in an ExceptionGroup."""
     return [copy.name for copy in copies if stored.get(copy.name) != await fingerprint(copy)]
+
+
+def check_fingerprints(moment: str) -> None:
+    """Raises if either copy's data has changed; `moment` says when, for the error."""
+    live = asyncio.run(live_fingerprints())
+    stored = load_stored_fingerprints()
+    changed = [name for name, digest in live.items() if stored.get(name) != digest]
+    if changed:
+        raise mismatch_error(changed) from RuntimeError(f"checked {moment}")
 
 
 def mismatch_error(names: list[str]) -> FingerprintError:
