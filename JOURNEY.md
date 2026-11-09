@@ -123,8 +123,8 @@ time zones, hard-coded keys, and a wrong SQL dialect (a MySQL
   that every query in that workspace failed with "try again in a moment",
   for good. It hit copy_b, the grader's copy. Reported with a repro, and
   fixed upstream, where the same race turned up in the schema cache.
-  Until the pin includes the fix, setup makes those rows itself before
-  the server starts. On the next clean run: 188 passed, 6 skipped.
+  Until the pin included the fix, setup made those rows itself before
+  the server started. On the next clean run: 188 passed, 6 skipped.
 
 ## Bugs found in the code this builds on
 
@@ -134,7 +134,8 @@ time zones, hard-coded keys, and a wrong SQL dialect (a MySQL
   ran on one server (`dd98f06`). The move could lower some unsafe counts,
   but no pass@1 [docs/rollout-review.md, "Upstream"].
 - **MCP-backbone** broke a workspace for good on two concurrent first
-  uses (above). Fixed upstream on `fix/concurrent-first-use`.
+  uses (above). Fixed upstream (PR #25); the pin moved there and the
+  setup workaround went.
 - **Ollama** keeps generating past its context window by shifting it,
   which turned one reply into 2.5 hours (amendment 2), and its MLX runner
   ignores the context setting it reports (the held-out breach above).
@@ -148,7 +149,5 @@ time zones, hard-coded keys, and a wrong SQL dialect (a MySQL
   nothing to train on; a stronger base model is the first step.
 - Close the grading gaps: grade copy B under a non-UTC time zone, shuffle
   lookup keys in copy B, and stop counting an unknown function as unsafe.
-- Move the pin past MCP-backbone's first-use fix and drop the setup
-  workaround.
 - The Environments Hub listing (G7) was skipped by choice; the repo is the
   public piece.

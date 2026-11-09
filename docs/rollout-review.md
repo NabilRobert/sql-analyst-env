@@ -137,10 +137,10 @@ without meeting all of it, or lose reward without doing anything unsafe.
   and schema cache are made on first use, with no unique key, so two
   concurrent first uses make two rows and that tool then fails in that
   workspace for good. A clean-machine run hit it on copy_b. Reported with
-  a repro; fixed upstream on `fix/concurrent-first-use`. Until the pin
-  includes it, `stack/setup_stack.py: make_first_use_rows` makes those
-  rows before the server starts. The baselines weren't affected: they ran
-  on a stack whose rows already existed, and no try errored.
+  a repro; fixed upstream (PR #25, merge `7182b5c`), and the pin moved
+  there, replacing a setup workaround that made those rows before the
+  server started. The baselines weren't affected: they ran on a stack
+  whose rows already existed, and no try errored.
 - **Context window (Ollama 0.40.11).** The MLX runner ignores
   `OLLAMA_CONTEXT_LENGTH` but reports it (above). The llama.cpp runner
   applies it, and past it shifts the window instead of stopping, which
