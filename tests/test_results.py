@@ -4,8 +4,10 @@ what the committed run records generate."""
 import pytest
 
 from analyst_env.results import (
+    CALL_TOKEN_LIMIT,
     RESULTS_FILE,
     bootstrap_interval,
+    call_limit_line,
     pass_every_try,
     render,
     summarise,
@@ -20,7 +22,9 @@ from analyst_env.run_record import (
 )
 
 
-def _rollout(task_id: str, is_correct: bool, is_errored: bool = False) -> Rollout:
+def _rollout(
+    task_id: str, is_correct: bool, is_errored: bool = False, max_call_tokens: int = 1000
+) -> Rollout:
     return Rollout(
         task_id=task_id,
         attempt=0,
@@ -33,7 +37,7 @@ def _rollout(task_id: str, is_correct: bool, is_errored: bool = False) -> Rollou
         queries_run=2,
         stop_condition="answer_submitted",
         seconds=10.0,
-        max_call_tokens=1000,
+        max_call_tokens=max_call_tokens,
         has_cut_off_reply=False,
     )
 
@@ -96,6 +100,19 @@ def test_the_interval_holds_the_estimate_and_repeats_exactly() -> None:
 def test_pass_every_try_counts_only_tasks_with_every_try_graded() -> None:
     passes = {"a": [True] * 5, "b": [True, False, True, True, True], "c": [True] * 4}
     assert pass_every_try(passes, tries=5) == (1, 2)
+
+
+def test_a_right_try_over_the_call_limit_is_listed_with_the_score_without_it() -> None:
+    over = _rollout("a", True, max_call_tokens=CALL_TOKEN_LIMIT + 5)
+    line = call_limit_line(_record([over, _rollout("b", True)]))
+    assert line is not None
+    assert "1 try had a call of 22,118 tokens or more (the longest 22,123)" in line
+    assert "1 of them was right; counted as wrong, pass@1 would be 50.0%" in line
+
+
+def test_a_run_within_the_call_limit_has_no_line() -> None:
+    under = _rollout("a", True, max_call_tokens=CALL_TOKEN_LIMIT - 1)
+    assert call_limit_line(_record([under])) is None
 
 
 def test_results_file_matches_the_run_records() -> None:

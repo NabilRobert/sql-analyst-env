@@ -15,12 +15,16 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from analyst_env.backbone import REPO_ROOT
+from analyst_env.baselines import CONTEXT_LENGTH
 from analyst_env.run_record import RunRecord, load_records
 
 RESULTS_FILE = REPO_ROOT / "RESULTS.md"
 BOOTSTRAP_RESAMPLES = 10_000
 BOOTSTRAP_SEED = 13
 INTERVAL_LEVEL = 0.95
+# Pass rule 2 (docs/guide.md, "When a run counts"): no model call may
+# reach 90% of the context window, 22,118 of 24,576 tokens.
+CALL_TOKEN_LIMIT = int(0.9 * CONTEXT_LENGTH)
 SPLIT_LABELS = {"dev": "dev (public)", "heldout": "held-out (private)", "train": "train"}
 
 
@@ -118,7 +122,7 @@ def provenance_row(record: RunRecord) -> str:
         record.split,
         f"{model.format} {model.quantization}, {model.runner} runner",
         model.runtime,
-        f"{model.context_length:,}",
+        _context(model.context_length, model.runner),
         "on" if model.is_thinking else "no",
         ", ".join(f"{name} {value}" for name, value in record.sampling.sent.items()),
         f"`{record.environment.commit[:7]}`",
@@ -126,6 +130,36 @@ def provenance_row(record: RunRecord) -> str:
         f"`runs/{record.split}/{model.name.replace(':', '-')}.json`",
     ]
     return "| " + " | ".join(cells) + " |"
+
+
+def call_limit_line(record: RunRecord) -> str | None:
+    """A run's tries over the call limit, and its pass@1 with any right ones
+    counted as wrong; None if no try went over."""
+    over = [rollout for rollout in record.rollouts if rollout.max_call_tokens >= CALL_TOKEN_LIMIT]
+    if not over:
+        return None
+    right_over = sum(1 for rollout in over if rollout.is_correct)
+    longest = max(rollout.max_call_tokens for rollout in over)
+    as_wrong = [
+        rollout.model_copy(update={"is_correct": False}) if rollout in over else rollout
+        for rollout in record.rollouts
+    ]
+    without = summarise(record.model_copy(update={"rollouts": as_wrong})).pass_at_1
+    tries = "1 try had" if len(over) == 1 else f"{len(over)} tries had"
+    were = "was" if right_over == 1 else "were"
+    return (
+        f"- `{record.model.name}`, {SPLIT_LABELS[record.split]} tasks: {tries} a call "
+        f"of {CALL_TOKEN_LIMIT:,} tokens or more (the longest {longest:,}). "
+        f"{right_over} of them {were} right; counted as wrong, pass@1 would be {_percent(without)}."
+    )
+
+
+def _context(context_length: int, runner: str) -> str:
+    # Ollama reports the configured window for every runner, but its MLX
+    # runner doesn't apply it (see "Runs over the call limit").
+    if runner == "mlx":
+        return f"{context_length:,} reported, not applied"
+    return f"{context_length:,}"
 
 
 PROVENANCE_HEADER = (
@@ -147,6 +181,31 @@ others. Pagila's schema is public and these models have likely seen it; the \
 data copies defeat memorised answers, not knowledge of the schema."""
 
 
+CALL_LIMIT_NOTES = """\
+Pass rule 2 says no model call may reach 90% of the context window, because \
+past the window Ollama's llama.cpp runner drops the start of the prompt. \
+Qwen3.5 runs on Ollama's MLX runner instead, which ignores \
+`OLLAMA_CONTEXT_LENGTH` although Ollama reports it, so these prompts were \
+processed whole, not cut: the tries saw more context than the rule allows, \
+not less. Held-out runs once, so the run couldn't be redone; Arthur chose to \
+count it, with the breach stated (2026-11-09)."""
+
+SERVER_NOTE = """\
+Every run here was measured on MCP-backbone `dd98f06`. The pin then moved to \
+`90fa10d`, which accepts top-level UNION, INTERSECT and EXCEPT (the old pin \
+refused them as unsafe) and refuses row locks (`FOR UPDATE` now counts as \
+unsafe). No try used a row lock and no submitted answer was a set operation, \
+so no pass@1 or pass^5 here would change. Some unsafe counts would: \
+[the rollout review](docs/rollout-review.md#upstream) has the tries."""
+
+
+def _call_limit_section(records: list[RunRecord]) -> list[str]:
+    lines = [line for line in map(call_limit_line, records) if line is not None]
+    if not lines:
+        return []
+    return ["## Runs over the call limit", "", CALL_LIMIT_NOTES, "", *lines, ""]
+
+
 def render(records: list[RunRecord]) -> str:
     ordered = sorted(records, key=lambda record: (record.split != "dev", record.model.name))
     lines = [
@@ -161,6 +220,9 @@ def render(records: list[RunRecord]) -> str:
         "",
         COLUMN_NOTES,
         "",
+        SERVER_NOTE,
+        "",
+        *_call_limit_section(ordered),
         "## How each run was made",
         "",
         PROVENANCE_HEADER,
