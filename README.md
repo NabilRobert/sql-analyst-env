@@ -9,14 +9,25 @@ tools, writes SQL and submits it. Code grades the answer: it must be right
 on the database the agent saw **and** on a hidden copy with different data,
 so a query that hard-codes the answer fails.
 
-**Status: slice 4 of 7.** The local stack, the two data copies, the 40
-reused tasks and their answer-key checks (slice 1); the environment on
-Prime Intellect's [`verifiers`](https://github.com/PrimeIntellect-ai/verifiers)
-v1, the reward, and a cheat suite of scripted policies that must fail to
-game it (slice 2); 60 new tasks, the train, dev and held-out splits, and a
-check that our grader agrees with agent-eval-harness's (slice 3);
-baselines for three small local models, in [RESULTS.md](RESULTS.md)
-(slice 4). The plan is on the `docs/planning` branch.
+**Status: done (slices 1 to 6; slice 7, training, is cut).** The local
+stack, the two data copies, the 40 reused tasks and their answer-key
+checks (slice 1); the environment on Prime Intellect's
+[`verifiers`](https://github.com/PrimeIntellect-ai/verifiers) v1, the
+reward, and a cheat suite of scripted policies that must fail to game it
+(slice 2); 60 new tasks, the train, dev and held-out splits, and a check
+that our grader agrees with agent-eval-harness's (slice 3); baselines for
+three small local models (slice 4); this README, the guide and a
+clean-machine check (slice 5); and [JOURNEY.md](JOURNEY.md) (slice 6).
+The plan is in `docs/planning/`. Not done, by choice: an
+Environments Hub listing (G7) and the training slice.
+
+**Results** ([RESULTS.md](RESULTS.md)): on the 30 held-out tasks, Qwen3.5
+4B gets 62.7% pass@1, Qwen3 1.7B and Llama 3.2 3B get 0%. No model found a
+way to score without answering ([docs/rollout-review.md](docs/rollout-review.md)).
+The numbers were measured on MCP-backbone `dd98f06`; the pin then moved to
+`90fa10d`, which could lower some unsafe counts but no pass@1. Seven
+Qwen3.5 held-out tries broke the context rule, because Ollama's MLX runner
+ignores the context setting; RESULTS.md says what that changes.
 
 **Please don't train on the tasks.** Each task file carries a canary GUID
 so leaked tasks can be spotted. The 30 held-out tasks aren't published.
@@ -73,14 +84,16 @@ analyst_env/
   sql_variants.py     the rewrite behind the tie check
   grading.py          when two results are the same answer
   fingerprint.py      the data fingerprint
-  cli.py              `uv run analyst-env fingerprint`
+  cli.py              `uv run analyst-env fingerprint | baseline | record | results`
 tests/                unit tests; tests/stack/ needs the stack running
   scripted/           scripted policies, a stand-in model server, an egress guard
   fixtures/           the harness's recorded verdicts, for the grader agreement test
-runs/                 one run record per model and split
+runs/                 one run record per model and split (dev/, heldout/):
+                      numbers and task ids, no task text
 RESULTS.md            generated from runs/
 docs/guide.md         how it works, in plain English
 docs/rollout-review.md  the top-scoring tries, read by hand for new cheats
+JOURNEY.md            what was tried, what broke, and why
 ```
 
 ## Reused, not rebuilt

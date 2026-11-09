@@ -46,6 +46,11 @@ flowchart TD
    MCP-backbone's script.
 4. `seed_workspaces` makes one MCP-backbone workspace per copy, with raised
    limits, and writes the keys to the stack's own volume (never the host).
+5. `make_first_use_rows` makes each workspace's rate-limit counters and
+   schema cache, one workspace at a time. It's a workaround: MCP-backbone
+   makes them on first use, and two concurrent first uses break that
+   workspace for good (fixed upstream; see "Upstream" in
+   [the rollout review](rollout-review.md#upstream)).
 
 **3. The checks run** (`uv run pytest`).
 1. `tests/stack/conftest.py: stack_keys` reads the keys with
@@ -410,7 +415,9 @@ becomes a cheat policy in the suite before anything else changes
   -d --wait`, `uv run analyst-env fingerprint --write`, and rerun the
   checks: every task's answers change.
 - **Move a pin:** MCP-backbone and the harness image in `compose.yaml`;
-  Pagila's commit in `compose.yaml`'s `PAGILA_COMMIT`.
+  Pagila's commit in `compose.yaml`'s `PAGILA_COMMIT`. Once the
+  MCP-backbone pin includes its first-use fix (`fix/concurrent-first-use`),
+  delete `make_first_use_rows` from `stack/setup_stack.py`.
 - **Point at a different local port:** set `ANALYST_ENV_MCP_URL`. Anything
   not on this machine is refused (`backbone.py: ensure_local`).
 - **Check more tasks at once:** `PARALLEL_TASKS` in
