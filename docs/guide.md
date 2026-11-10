@@ -46,11 +46,6 @@ flowchart TD
    MCP-backbone's script.
 4. `seed_workspaces` makes one MCP-backbone workspace per copy, with raised
    limits, and writes the keys to the stack's own volume (never the host).
-5. `make_first_use_rows` makes each workspace's rate-limit counters and
-   schema cache, one workspace at a time. It's a workaround: MCP-backbone
-   makes them on first use, and two concurrent first uses break that
-   workspace for good (fixed upstream; see "Upstream" in
-   [the rollout review](rollout-review.md#upstream)).
 
 **3. The checks run** (`uv run pytest`).
 1. `tests/stack/conftest.py: stack_keys` reads the keys with
@@ -298,15 +293,19 @@ builds the record from the traces, timing included (`run_timing`).
   seed (`results.py: bootstrap_interval`).
 - **pass^5** counts the tasks a model got right on all five tries.
 
-**Which server the numbers ran on.** Every baseline ran against
-MCP-backbone at `dd98f06`. The pin then moved to `90fa10d`, which accepts
-top-level UNION, INTERSECT and EXCEPT (the old pin refused them as
-unsafe) and refuses row locks (`FOR UPDATE` now counts as unsafe). No try
-used a row lock, and no submitted answer was a set operation, so no
-pass@1 or pass^5 number would change. Some unsafe counts would: tries
-whose only unsafe query was a set operation. A try that went on after a
-refusal might have gone differently, which can't be known without
-rerunning.
+**Which server the numbers ran on.** Every baseline was measured on
+MCP-backbone `dd98f06`, and none was rerun after the pin moved. The pin
+moved twice:
+- to `90fa10d`, which accepts top-level UNION, INTERSECT and EXCEPT (the
+  old pin refused them as unsafe) and refuses row locks (`FOR UPDATE` now
+  counts as unsafe). No try used a row lock, and no submitted answer was a
+  set operation, so no pass@1 or pass^5 number would change. Some unsafe
+  counts would: tries whose only unsafe query was a set operation. A try
+  that went on after a refusal might have gone differently, which can't
+  be known without rerunning.
+- to `7182b5c`, which fixes the first-use race (see "Upstream" in
+  [the rollout review](rollout-review.md#upstream)). It changes nothing a
+  query or a grade sees.
 
 **After each run,** the 20 highest-scoring tries per model are read by
 hand for a way of scoring that isn't answering the question. A new one
@@ -415,9 +414,10 @@ becomes a cheat policy in the suite before anything else changes
   -d --wait`, `uv run analyst-env fingerprint --write`, and rerun the
   checks: every task's answers change.
 - **Move a pin:** MCP-backbone and the harness image in `compose.yaml`;
-  Pagila's commit in `compose.yaml`'s `PAGILA_COMMIT`. Once the
-  MCP-backbone pin includes its first-use fix (`fix/concurrent-first-use`),
-  delete `make_first_use_rows` from `stack/setup_stack.py`.
+  Pagila's commit in `compose.yaml`'s `PAGILA_COMMIT`. Then `docker
+  compose down -v` and `up` again: setup runs only on a fresh stack, so an
+  old stack never gets the new pin's database migrations (the move to
+  `7182b5c` brings one).
 - **Point at a different local port:** set `ANALYST_ENV_MCP_URL`. Anything
   not on this machine is refused (`backbone.py: ensure_local`).
 - **Check more tasks at once:** `PARALLEL_TASKS` in

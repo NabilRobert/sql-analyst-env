@@ -15,8 +15,6 @@ perturbed copies of Pagila (ADR-009) and one workspace per copy.
 4. Migrate MCP-backbone's bookkeeping database.
 5. Seed one workspace per copy (and one on stock Pagila, for the cheat
    suite), with raised limits, and write their keys to /out/keys.json.
-6. Make each workspace's rate-limit counters and schema cache, one at a
-   time (a workaround, see make_first_use_rows).
 
 Runs once; a second run is a no-op, and a run that stopped halfway
 starts over. Writes /out/mcp.env for serve.sh.
@@ -67,9 +65,6 @@ STOCK = "pagila"
 # Far above what a full task-check run or a baseline uses in an hour, but
 # still a limit: a runaway loop gets stopped by MCP-backbone itself.
 QUERIES_PER_HOUR = 100_000
-
-# MCP-backbone's two rate-limit buckets: run_query and sample_rows.
-RATE_LIMIT_BUCKETS = ("query", "sample")
 
 
 def psql(*args: str, db: str = "postgres") -> None:
@@ -141,35 +136,6 @@ async def seed_workspaces(urls: dict[str, str]) -> dict[str, str]:
     return keys
 
 
-async def make_first_use_rows() -> None:
-    """Workaround for an MCP-backbone race (reported to its owner,
-    2026-11-07, fixed on its branch fix/concurrent-first-use; see
-    "Upstream" in docs/rollout-review.md). The server makes a workspace's
-    rate-limit counters and schema cache on first use, and two concurrent
-    first uses make two rows, after which that tool fails in that workspace
-    for good. Making each row here, before the server starts, leaves no
-    first use to race. Drop this once the pin includes the fix."""
-    from app.auth.models import Workspace
-    from app.auth.rate_limit import check_and_increment
-    from app.config import settings
-    from app.db import SessionLocal
-    from app.query.schema_cache import get_table_metadata
-    from app.query.target import get_data_source
-    from sqlalchemy import select
-
-    window_seconds = settings.demo_rate_limit_window_seconds
-    async with SessionLocal() as session:
-        workspaces = (await session.execute(select(Workspace))).scalars().all()
-        for workspace in workspaces:
-            for bucket in RATE_LIMIT_BUCKETS:
-                # Counts as one request against QUERIES_PER_HOUR.
-                await check_and_increment(
-                    session, workspace, QUERIES_PER_HOUR, window_seconds, bucket
-                )
-            data_source = await get_data_source(session, workspace)
-            await get_table_metadata(session, workspace, data_source)
-
-
 def main() -> int:
     if DONE.exists():
         print("already set up (`docker compose down -v` to start over)")
@@ -204,8 +170,6 @@ def main() -> int:
     print("== seeding one workspace per database")
     keys = asyncio.run(seed_workspaces(urls))
     (OUT / "keys.json").write_text(json.dumps(keys))
-    print("== making each workspace's first-use rows")
-    asyncio.run(make_first_use_rows())
     DONE.write_text(f"pagila {commit}\n")
     print("== done: the server starts next")
     return 0
